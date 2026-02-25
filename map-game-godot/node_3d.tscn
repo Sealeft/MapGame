@@ -1,0 +1,62 @@
+[gd_scene format=3 uid="uid://s1u14lqnd5pn"]
+
+[ext_resource type="PackedScene" uid="uid://fb0xwhbw0vdi" path="res://player.tscn" id="1_noarx"]
+[ext_resource type="Shader" uid="uid://dlr2412umn8ts" path="res://ps1_shader.gdshader" id="2_noarx"]
+[ext_resource type="Script" uid="uid://ddec4bwx3kvty" path="res://scripts/GameWorld.gd" id="3_game_world"]
+[ext_resource type="Script" uid="uid://p5qwb2hscflo" path="res://scripts/ObjectiveSystem.gd" id="4_objectives"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_a0tk4"]
+shader = ExtResource("2_noarx")
+
+[node name="Node3D" type="Node3D" unique_id=1792218576]
+script = ExtResource("3_game_world")
+
+[node name="CesiumGeoreference" type="CesiumGeoreference" parent="." unique_id=1770320167]
+ecefX = 3683492.437257057
+ecefY = -382601.28902406804
+ecefZ = 5175604.272374991
+latitude = 54.59700000000104
+longitude = -5.93
+altitude = 100.0
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0, 0)
+
+[node name="Google Photorealistic 3D Tiles" type="Cesium3DTileset" parent="CesiumGeoreference" unique_id=1796547288]
+loading_descendant_limit = 32
+generate_missing_normals_smooth = true
+ion_asset_id = 2275207
+maximum_culling_distance = 500.0
+collision_range = 200.0
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0)
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=931314922]
+transform = Transform3D(1, 0, 0, 0, 0.087155804, 0.9961947, 0, -0.9961947, 0.087155804, 30, 500, 30)
+light_energy = 8.0
+
+[node name="Player" parent="." unique_id=110196196 instance=ExtResource("1_noarx")]
+move_speed = 10.0
+sprint_speed = 15.0
+jump_velocity = 6.0
+sprint_fov_boost = 15.0
+sprint_fov_lerp_speed = 20.0
+
+[node name="CesiumStaticCamera" parent="Player" index="1" unique_id=1518887899 node_paths=PackedStringArray("globe_node", "tilesets")]
+static_near_plane = 0.1
+globe_node = NodePath("../../CesiumGeoreference")
+tilesets = [NodePath("../../CesiumGeoreference/Google Photorealistic 3D Tiles")]
+render_atmosphere = true
+
+[node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=1146109504]
+
+[node name="ColorRect" type="ColorRect" parent="CanvasLayer" unique_id=347801379]
+material = SubResource("ShaderMaterial_a0tk4")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ObjectiveSystem" type="Node3D" parent="." unique_id=564289007]
+script = ExtResource("4_objectives")
+start_time_seconds = 6000.0
+
+[editable path="Player"]

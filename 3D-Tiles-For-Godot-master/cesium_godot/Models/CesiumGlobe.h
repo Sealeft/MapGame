@@ -1,0 +1,133 @@
+#ifndef CESIUM_GLOBE_H
+#define CESIUM_GLOBE_H
+
+#include "Models/CesiumGDTileset.h"
+#include "godot_cpp/variant/vector3.hpp"
+#include <vector>
+#if defined(CESIUM_GD_EXT)
+#include <godot_cpp/classes/object.hpp>
+#include <godot_cpp/classes/node3d.hpp>
+using namespace godot;
+#elif defined(CESIUM_GD_MODULE)
+#include "core/object/object.h"
+#include "scene/3d/node_3d.h"
+#endif
+
+#include <glm/ext/vector_double3.hpp>
+
+/// @brief small typedef for clarity
+using EcefVector3 = Vector3;
+
+/// @brief We define this in C++ to provide any utility methods from the Globe instance
+class CesiumGeoreference : public Node3D {
+	GDCLASS(CesiumGeoreference, Node3D)
+public:
+
+	enum class OriginType {
+		CartographicOrigin, //Georeference
+		TrueOrigin
+	};
+
+	Transform3D get_tx_engine_to_ecef() const;
+
+	Transform3D get_tx_ecef_to_engine() const;
+
+	Transform3D get_initial_tx_ecef_to_engine() const;
+
+	Transform3D get_initial_tx_engine_to_ecef() const;
+
+	Vector3 get_global_surface_position(const Vector3& cameraPos, const Vector3& cameraDirection);
+
+	Vector3 get_global_center_position();
+
+	Vector3 get_mouse_pos_ecef();
+
+	Vector3 get_ellipsoid_dimensions() const;
+
+	Vector3 ray_to_surface(const Vector3& origin, const Vector3& direction) const;
+
+	Basis eus_at_ecef(const EcefVector3& ecef) const;
+
+	Vector3 get_normal_at_surface_pos(const EcefVector3& ecef) const;
+
+	int get_origin_type() const;
+
+	OriginType get_origin_type_raw() const;
+
+	void set_origin_type(int type);
+
+	double get_ecef_x() const;
+
+	void set_ecef_x(double x);
+
+	double get_ecef_y() const;
+
+	void set_ecef_y(double y);
+
+	double get_ecef_z() const;
+
+	void set_ecef_z(double z);
+
+	real_t get_scale_factor() const;
+
+	void set_scale_factor(real_t factor);
+	
+	const glm::dvec3& get_ecef_position() const;
+
+	void set_latitude(double lat);
+
+	void set_longitude(double longitude);
+
+	void set_altitude(double alt);
+
+	double get_latitude() const;
+
+	double get_longitude() const;
+
+	double get_altitude() const;
+	
+	glm::dvec3 get_lla() const;
+
+	Vector3 ecef_to_lat_lon_alt_rad(const EcefVector3& ecef) const;
+
+	Vector3 ecef_to_lat_lon_alt_deg(const EcefVector3& ecef) const;
+
+	EcefVector3 lat_lon_alt_rad_to_ecef(const Vector3& lla) const;
+	
+	void register_tileset_to_move_origin(Cesium3DTileset* tileset);
+	
+	void update_ecef_with_lla(glm::dvec3 lla);
+
+	void move_origin(glm::dvec3 previousPosition);
+
+	void set_should_update_origin(bool updateOrigin);
+
+	bool get_should_update_origin() const;
+
+	const glm::dvec3& get_original_origin_ecef() const;
+	
+	void _enter_tree() override;
+	
+private:
+	EcefVector3 trace_ray_to_ellipsoid(const EcefVector3& origin, const EcefVector3& rayDirection) const;
+
+	Transform3D m_initialOriginTransform{};
+	
+	glm::dvec3 m_ecefPosition{ -1292940.0, -4740030.0, 4056960.0 };
+	
+	glm::dvec3 m_originalEcefPosition;
+
+	real_t m_scaleFactor = 1.0;
+
+	bool m_shouldUpdateOrigin = false;
+	
+	std::vector<Cesium3DTileset*> m_trackedTilesets;
+	
+	OriginType m_originType = OriginType::CartographicOrigin;
+	
+protected:
+	static void _bind_methods();
+
+};
+
+#endif // !CESIUM_GLOBE_H
