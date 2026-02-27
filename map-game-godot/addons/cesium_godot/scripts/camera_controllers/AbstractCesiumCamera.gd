@@ -71,7 +71,18 @@ func _load_atmosphere() -> void:
 func _process(_delta: float) -> void:
 	if _is_exiting_tree or is_queued_for_deletion():
 		return
-	if not is_inside_tree() or globe_node == null or not globe_node.is_inside_tree() or globe_node.is_queued_for_deletion():
+	if not is_inside_tree() or not is_node_ready():
+		return
+	if get_world_3d() == null:
+		return
+	var tree := get_tree()
+	if tree == null or tree.current_scene == null or not tree.current_scene.is_ancestor_of(self):
+		return
+	if globe_node == null or not is_instance_valid(globe_node) or not globe_node.is_inside_tree() or globe_node.is_queued_for_deletion() or not globe_node.is_node_ready():
+		return
+	if globe_node.get_world_3d() == null:
+		return
+	if not tree.current_scene.is_ancestor_of(globe_node):
 		return
 	_update_tilesets()
 
@@ -79,20 +90,42 @@ func _process(_delta: float) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_ENTER_TREE:
 		_is_exiting_tree = false
+		set_process(true)
 	elif what == NOTIFICATION_EXIT_TREE:
 		_is_exiting_tree = true
+		set_process(false)
 
 
 func _update_tilesets() -> void:
 	if _is_exiting_tree or is_queued_for_deletion():
 		return
-	if not is_inside_tree() or globe_node == null or not globe_node.is_inside_tree() or globe_node.is_queued_for_deletion():
+	if not is_inside_tree() or not is_node_ready():
+		return
+	if get_world_3d() == null:
+		return
+	var tree := get_tree()
+	if tree == null or tree.current_scene == null or not tree.current_scene.is_ancestor_of(self):
+		return
+	if globe_node == null or not is_instance_valid(globe_node) or not globe_node.is_inside_tree() or globe_node.is_queued_for_deletion() or not globe_node.is_node_ready():
+		return
+	if globe_node.get_world_3d() == null:
+		return
+	if not tree.current_scene.is_ancestor_of(globe_node):
 		return
 	if not global_position.is_finite() or not global_basis.x.is_finite() or not global_basis.y.is_finite() or not global_basis.z.is_finite():
 		return
-	var camera_xform := self.globe_node.get_tx_engine_to_ecef() * self.global_transform
+	var camera_engine_xform := Transform3D(self.global_basis, self.global_position)
+	var camera_xform := self.globe_node.get_tx_engine_to_ecef() * camera_engine_xform
 	for tileset in self.tilesets:
 		if (tileset == null): continue
-		if not tileset.is_inside_tree() or tileset.is_queued_for_deletion():
+		if not is_instance_valid(tileset) or not tileset.is_inside_tree() or tileset.is_queued_for_deletion() or not tileset.is_node_ready():
+			continue
+		if tileset.get_world_3d() == null:
+			continue
+		if not tree.current_scene.is_ancestor_of(tileset):
+			continue
+		if not is_inside_tree() or _is_exiting_tree or is_queued_for_deletion() or get_world_3d() == null:
+			return
+		if not tileset.is_inside_tree() or tileset.is_queued_for_deletion() or tileset.get_world_3d() == null:
 			continue
 		tileset.update_tileset(camera_xform)

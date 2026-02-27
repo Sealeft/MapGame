@@ -591,6 +591,12 @@ void Cesium3DTileset::render_tile_as_node(const Cesium3DTilesSelection::Tile& ti
 	}
 	Cesium3DTile* foundNode = static_cast<Cesium3DTile*>(renderContent->getRenderResources());
 	if (foundNode == nullptr) return;
+
+	if (!foundNode->is_inside_tree()) {
+		size_t hash = std::visit(CesiumVariantHash{}, tile.getTileID());
+		this->register_tile(foundNode, hash);
+		foundNode->set_name(itos(hash));
+	}
 	
 	if (this->m_createPhysicsMeshes) {
 		Node* collisionNode = foundNode->get_child_count() < 1 ? nullptr : foundNode->get_child(0);
@@ -614,12 +620,6 @@ void Cesium3DTileset::render_tile_as_node(const Cesium3DTilesSelection::Tile& ti
 		}
 	}
 
-	if (!foundNode->is_inside_tree()) {
-		size_t hash = std::visit(CesiumVariantHash{}, tile.getTileID());
-		this->register_tile(foundNode, hash);
-		foundNode->set_name(itos(hash));
-	}
-	
 	if (!this->m_debugVolumesFunction.is_null()) {
 		// Get the xform for the current tile rotation
 		// Basis + Zero pos * ecef_engine_xform()

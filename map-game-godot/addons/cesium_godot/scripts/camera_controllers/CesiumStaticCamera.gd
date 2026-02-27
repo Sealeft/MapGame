@@ -29,6 +29,16 @@ func _ready() -> void:
 		pass
 
 func _process(delta: float) -> void:
+	if _is_exiting_tree or is_queued_for_deletion():
+		return
+	if not is_inside_tree() or not is_node_ready() or get_world_3d() == null:
+		return
+	if globe_node == null or not is_instance_valid(globe_node) or not globe_node.is_inside_tree() or globe_node.is_queued_for_deletion() or not globe_node.is_node_ready() or globe_node.get_world_3d() == null:
+		return
+	var tree := get_tree()
+	if tree == null or tree.current_scene == null or not tree.current_scene.is_ancestor_of(self) or not tree.current_scene.is_ancestor_of(globe_node):
+		return
+
 	super(delta)
 	if _is_exiting_tree or is_queued_for_deletion():
 		return
