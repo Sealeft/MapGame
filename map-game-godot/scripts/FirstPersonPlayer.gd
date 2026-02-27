@@ -180,14 +180,14 @@ func _setup_world_border_visual() -> void:
 
 	add_child(world_border_mesh_instance)
 
-func _snap_position_to_ground_along_up(position: Vector3, up: Vector3) -> Vector3:
+func _snap_position_to_ground_along_up(sample_position: Vector3, up: Vector3) -> Vector3:
 	if get_world_3d() == null:
-		return position
+		return sample_position
 
 	var safe_up := _safe_normalized(up, Vector3.UP)
 	var cast_offset := maxf(world_border_ground_probe_height, world_border_height)
-	var ray_start := position + safe_up * cast_offset
-	var ray_end := position - safe_up * cast_offset
+	var ray_start := sample_position + safe_up * cast_offset
+	var ray_end := sample_position - safe_up * cast_offset
 
 	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end)
 	query.collision_mask = world_border_ground_collision_mask
@@ -197,11 +197,11 @@ func _snap_position_to_ground_along_up(position: Vector3, up: Vector3) -> Vector
 
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
-		return position
+		return sample_position
 
 	var hit_position: Vector3 = hit.position
 	if not hit_position.is_finite():
-		return position
+		return sample_position
 
 	return hit_position
 
@@ -577,7 +577,6 @@ func _try_start_grapple() -> void:
 	if not grapple_enabled or camera == null or not camera.is_inside_tree() or grapple_rehook_timer > 0.0 or grapple_cooldown_timer > 0.0:
 		return
 
-	var origin := camera.global_position
 	var hit := _find_best_grapple_hit()
 	if hit.is_empty():
 		return
