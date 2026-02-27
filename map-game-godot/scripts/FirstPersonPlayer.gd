@@ -21,13 +21,15 @@ extends CharacterBody3D
 @export var slope_boost_max_angle_degrees: float = 45.0
 @export var world_border_enabled: bool = true
 @export var world_border_radius: float = 200.0
-@export var world_border_height: float = 180.0
+@export var world_border_height: float = 420.0
 @export var world_border_visible_distance: float = 40.0
-@export var world_border_ground_embed_depth: float = 6.0
+@export var world_border_ground_embed_depth: float = 160.0
 @export var world_border_ground_probe_height: float = 400.0
 @export_flags_3d_physics var world_border_ground_collision_mask: int = 1
 @export var world_border_base_alpha: float = 0.28
 @export var world_border_color: Color = Color(0.25, 0.9, 1.0, 1.0)
+@export var world_border_visible_arc_degrees: float = 70.0
+@export var world_border_arc_fade_degrees: float = 20.0
 @export var air_strafe_enabled: bool = true
 @export var air_strafe_bonus_acceleration: float = 20.0
 @export var air_strafe_min_speed: float = 6.0
@@ -55,6 +57,7 @@ extends CharacterBody3D
 @export var grapple_enabled: bool = true
 @export var grapple_max_distance: float = 80.0
 @export var grapple_min_hit_distance: float = 1.5
+@export var grapple_ray_max_scan_hits: int = 12
 @export var grapple_pull_strength: float = 85.0
 @export var grapple_gravity_scale: float = 0.7
 @export var grapple_radial_damping: float = 0.02
@@ -77,6 +80,7 @@ extends CharacterBody3D
 @export var grapple_downward_gravity_assist: float = 22.0
 @export var grapple_detach_directional_boost: float = 0.9
 @export var grapple_downward_full_gravity_threshold: float = 0.25
+@export var grapple_cooldown_seconds: float = 10.0
 @export var grapple_rope_visual_enabled: bool = true
 @export var grapple_rope_color: Color = Color(0.9, 0.95, 1.0, 1.0)
 @export var grapple_rope_radius: float = 0.01
@@ -119,6 +123,7 @@ var grapple_point: Vector3 = Vector3.ZERO
 var grapple_rope_length: float = 0.0
 var grapple_button_was_down: bool = false
 var grapple_rehook_timer: float = 0.0
+var grapple_cooldown_timer: float = 0.0
 var grapple_reel_dir: float = 0.0
 var grapple_rope_mesh_instance: MeshInstance3D
 var grapple_rope_mesh: CylinderMesh
@@ -131,11 +136,16 @@ var bunnyhop_grace_timer: float = 0.0
 var world_border_origin: Vector3 = Vector3.ZERO
 var world_border_up: Vector3 = Vector3.UP
 var world_border_mesh_instance: MeshInstance3D
-var world_border_material: StandardMaterial3D
+var world_border_material: ShaderMaterial
+var _border_upright_sync_frames: int = 0
 var grapple_crosshair_layer: CanvasLayer
 var grapple_crosshair_center: Control
 var grapple_crosshair_h: ColorRect
 var grapple_crosshair_v: ColorRect
+var grapple_indicator_root: Control
+var grapple_indicator_icon: Label
+var grapple_indicator_bar_bg: ColorRect
+var grapple_indicator_bar_fill: ColorRect
 
 func _add_impact_fov(amount: float) -> void:
 	impact_fov_offset = clampf(impact_fov_offset + amount, -impact_fov_max_offset, impact_fov_max_offset)
@@ -156,12 +166,16 @@ func _setup_world_border_visual() -> void:
 	mesh.radial_segments = 96
 	world_border_mesh_instance.mesh = mesh
 
-	world_border_material = StandardMaterial3D.new()
-	world_border_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	world_border_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	world_border_material.albedo_color = Color(world_border_color.r, world_border_color.g, world_border_color.b, world_border_base_alpha)
-	world_border_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	world_border_material.disable_receive_shadows = true
+	var border_shader := Shader.new()
+	border_shader.code = "shader_type spatial;\nrender_mode unshaded, cull_disabled, blend_mix;\n\nuniform vec4 border_color : source_color = vec4(0.25, 0.9, 1.0, 1.0);\nuniform float global_alpha = 0.3;\nuniform float section_center_u = 0.0;\nuniform float section_half_width_u = 0.1;\nuniform float section_feather_u = 0.03;\n\nfloat wrap_dist(float a, float b) {\n\tfloat d = abs(a - b);\n\treturn min(d, 1.0 - d);\n}\n\nvoid fragment() {\n\tfloat d = wrap_dist(UV.x, section_center_u);\n\tfloat feather = max(section_feather_u, 0.0001);\n\tfloat mask = 1.0 - smoothstep(section_half_width_u, section_half_width_u + feather, d);\n\tfloat alpha = border_color.a * global_alpha * mask;\n\tif (alpha < 0.001) {\n\t\tdiscard;\n\t}\n\tALBEDO = border_color.rgb;\n\tALPHA = alpha;\n}\n"
+
+	world_border_material = ShaderMaterial.new()
+	world_border_material.shader = border_shader
+	world_border_material.set_shader_parameter("border_color", world_border_color)
+	world_border_material.set_shader_parameter("global_alpha", world_border_base_alpha)
+	world_border_material.set_shader_parameter("section_center_u", 0.0)
+	world_border_material.set_shader_parameter("section_half_width_u", maxf(world_border_visible_arc_degrees / 360.0, 0.001) * 0.5)
+	world_border_material.set_shader_parameter("section_feather_u", maxf(world_border_arc_fade_degrees / 360.0, 0.001) * 0.5)
 	world_border_mesh_instance.material_override = world_border_material
 
 	add_child(world_border_mesh_instance)
@@ -216,7 +230,18 @@ func _update_world_border_visual() -> void:
 	if world_border_material:
 		var t := clampf(1.0 - (border_distance / maxf(world_border_visible_distance, 0.001)), 0.0, 1.0)
 		var alpha := world_border_base_alpha * t
-		world_border_material.albedo_color = Color(world_border_color.r, world_border_color.g, world_border_color.b, alpha)
+		var local_to_player := world_border_mesh_instance.to_local(global_position)
+		local_to_player.y = 0.0
+		var player_u := 0.0
+		if local_to_player.length_squared() > 0.000001:
+			var angle := atan2(local_to_player.z, local_to_player.x)
+			player_u = fposmod((angle / TAU) + 1.0, 1.0)
+
+		world_border_material.set_shader_parameter("border_color", world_border_color)
+		world_border_material.set_shader_parameter("global_alpha", alpha)
+		world_border_material.set_shader_parameter("section_center_u", player_u)
+		world_border_material.set_shader_parameter("section_half_width_u", maxf(world_border_visible_arc_degrees / 360.0, 0.001) * 0.5)
+		world_border_material.set_shader_parameter("section_feather_u", maxf(world_border_arc_fade_degrees / 360.0, 0.001) * 0.5)
 
 func _enforce_world_border() -> void:
 	if not world_border_enabled:
@@ -237,6 +262,14 @@ func _enforce_world_border() -> void:
 	var outward_speed := velocity.dot(radial_dir)
 	if outward_speed > 0.0:
 		velocity -= radial_dir * outward_speed
+
+func _sync_world_border_upright_from_player(adjust_origin: bool) -> void:
+	if not world_border_enabled:
+		return
+	world_border_up = _safe_normalized(up_direction, _safe_normalized(surface_basis.y, world_border_up))
+	if adjust_origin:
+		world_border_origin = _snap_position_to_ground_along_up(world_border_origin, world_border_up)
+	_update_world_border_visual()
 
 func _apply_air_strafe_bonus(horizontal_velocity: Vector3, move_direction: Vector3, up_dir: Vector3, delta: float) -> Vector3:
 	if not air_strafe_enabled or move_direction == Vector3.ZERO:
@@ -372,11 +405,61 @@ func _setup_grapple_crosshair_ui() -> void:
 		grapple_crosshair_v.size.y = maxf(grapple_crosshair_size - grapple_crosshair_gap, 1.0)
 		grapple_crosshair_v.position.y = half_gap
 
+	grapple_indicator_root = Control.new()
+	grapple_indicator_root.name = "GrappleCooldownIndicator"
+	grapple_indicator_root.position = Vector2(-8.0, grapple_crosshair_size + 10.0)
+	grapple_indicator_root.custom_minimum_size = Vector2(56.0, 12.0)
+	grapple_crosshair_center.add_child(grapple_indicator_root)
+
+	grapple_indicator_icon = Label.new()
+	grapple_indicator_icon.name = "GrappleIcon"
+	grapple_indicator_icon.position = Vector2(0.0, -2.0)
+	grapple_indicator_icon.size = Vector2(14.0, 12.0)
+	grapple_indicator_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	grapple_indicator_icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	grapple_indicator_icon.add_theme_font_size_override("font_size", 12)
+	grapple_indicator_icon.text = "⛓"
+	grapple_indicator_root.add_child(grapple_indicator_icon)
+
+	grapple_indicator_bar_bg = ColorRect.new()
+	grapple_indicator_bar_bg.name = "CooldownBarBg"
+	grapple_indicator_bar_bg.position = Vector2(16.0, 3.0)
+	grapple_indicator_bar_bg.size = Vector2(40.0, 6.0)
+	grapple_indicator_bar_bg.color = Color(0.06, 0.08, 0.1, 0.7)
+	grapple_indicator_root.add_child(grapple_indicator_bar_bg)
+
+	grapple_indicator_bar_fill = ColorRect.new()
+	grapple_indicator_bar_fill.name = "CooldownBarFill"
+	grapple_indicator_bar_fill.position = Vector2.ZERO
+	grapple_indicator_bar_fill.size = Vector2(40.0, 6.0)
+	grapple_indicator_bar_fill.color = grapple_crosshair_color_valid
+	grapple_indicator_bar_bg.add_child(grapple_indicator_bar_fill)
+
+func _set_grapple_indicator(color: Color, fill_ratio: float) -> void:
+	if grapple_indicator_icon:
+		grapple_indicator_icon.modulate = color
+	if grapple_indicator_bar_fill:
+		grapple_indicator_bar_fill.color = color
+		var ratio := clampf(fill_ratio, 0.0, 1.0)
+		grapple_indicator_bar_fill.size.x = 40.0 * ratio
+
 func _set_crosshair_color(color: Color) -> void:
 	if grapple_crosshair_h:
 		grapple_crosshair_h.color = color
 	if grapple_crosshair_v:
 		grapple_crosshair_v.color = color
+
+func _get_center_ray_direction() -> Vector3:
+	if camera == null or not camera.is_inside_tree():
+		return Vector3.ZERO
+	var viewport := get_viewport()
+	if viewport == null:
+		return -camera.global_basis.z
+	var viewport_center := viewport.get_visible_rect().size * 0.5
+	var dir := camera.project_ray_normal(viewport_center)
+	if not dir.is_finite() or dir.length_squared() < 0.000001:
+		return -camera.global_basis.z
+	return dir.normalized()
 
 func _update_grapple_crosshair() -> void:
 	if not grapple_crosshair_enabled or grapple_crosshair_layer == null:
@@ -388,12 +471,22 @@ func _update_grapple_crosshair() -> void:
 		return
 	if grapple_active:
 		_set_crosshair_color(grapple_crosshair_color_latched)
+		_set_grapple_indicator(grapple_crosshair_color_latched, 1.0)
+		return
+
+	if grapple_cooldown_timer > 0.0:
+		_set_crosshair_color(grapple_crosshair_color_invalid)
+		var cooldown_total := maxf(grapple_cooldown_seconds, 0.001)
+		var fill_ratio := clampf(1.0 - (grapple_cooldown_timer / cooldown_total), 0.0, 1.0)
+		_set_grapple_indicator(grapple_crosshair_color_invalid, fill_ratio)
 		return
 
 	var origin := camera.global_position
-	var hit := _cast_grapple_ray(origin, -camera.global_basis.z)
+	var center_dir := _get_center_ray_direction()
+	var hit := _cast_grapple_ray(origin, center_dir)
 	var can_grapple := not hit.is_empty()
 	_set_crosshair_color(grapple_crosshair_color_valid if can_grapple else grapple_crosshair_color_invalid)
+	_set_grapple_indicator(grapple_crosshair_color_valid, 1.0)
 
 func _update_debug_text() -> void:
 	if debug_label == null:
@@ -440,16 +533,19 @@ func _cast_grapple_ray(origin: Vector3, direction: Vector3) -> Dictionary:
 	if not direction.is_finite() or direction.length_squared() < 0.000001:
 		return {}
 
+	if get_world_3d() == null:
+		return {}
+
 	var to := origin + direction.normalized() * grapple_max_distance
 	var query := PhysicsRayQueryParameters3D.create(origin, to)
 	query.exclude = [self]
 	query.collision_mask = grapple_collision_mask
-	query.hit_back_faces = true
+	query.hit_back_faces = false
 	query.hit_from_inside = false
 	query.collide_with_areas = false
 	query.collide_with_bodies = true
 
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
 		return {}
 
@@ -457,8 +553,15 @@ func _cast_grapple_ray(origin: Vector3, direction: Vector3) -> Dictionary:
 	if not hit_pos.is_finite():
 		return {}
 
-	if origin.distance_to(hit_pos) < grapple_min_hit_distance:
+	var hit_distance: float = origin.distance_to(hit_pos)
+	if hit_distance < grapple_min_hit_distance:
 		return {}
+
+	var hit_normal: Vector3 = hit.normal
+	if hit_normal.is_finite() and hit_normal.length_squared() > 0.000001:
+		var ray_dir := direction.normalized()
+		if hit_normal.dot(ray_dir) > -0.02:
+			return {}
 
 	return hit
 
@@ -467,44 +570,11 @@ func _find_best_grapple_hit() -> Dictionary:
 		return {}
 
 	var origin := camera.global_position
-	var center_hit := _cast_grapple_ray(origin, -camera.global_basis.z)
-	if not center_hit.is_empty():
-		return center_hit
-	if not grapple_use_aim_assist:
-		return {}
-
-	var viewport := get_viewport()
-	if viewport == null:
-		return {}
-
-	var viewport_center := viewport.get_visible_rect().size * 0.5
-	var best_hit: Dictionary = {}
-	var best_score := INF
-
-	var ring_count := maxi(grapple_aim_assist_rings, 1)
-	var samples_per_ring := maxi(grapple_aim_assist_samples_per_ring, 4)
-	for ring in range(1, ring_count + 1):
-		var radius_px := grapple_aim_assist_radius_pixels * float(ring) / float(ring_count)
-		for sample_index in range(samples_per_ring):
-			var angle := TAU * float(sample_index) / float(samples_per_ring)
-			var sample_point := viewport_center + Vector2(cos(angle), sin(angle)) * radius_px
-			var dir := camera.project_ray_normal(sample_point)
-			var hit := _cast_grapple_ray(origin, dir)
-			if hit.is_empty():
-				continue
-
-			var hit_pos: Vector3 = hit.position
-			var distance_score := origin.distance_to(hit_pos) * 0.01
-			var offset_score := radius_px
-			var score := offset_score + distance_score
-			if score < best_score:
-				best_score = score
-				best_hit = hit
-
-	return best_hit
+	var center_dir := _get_center_ray_direction()
+	return _cast_grapple_ray(origin, center_dir)
 
 func _try_start_grapple() -> void:
-	if not grapple_enabled or camera == null or not camera.is_inside_tree() or grapple_rehook_timer > 0.0:
+	if not grapple_enabled or camera == null or not camera.is_inside_tree() or grapple_rehook_timer > 0.0 or grapple_cooldown_timer > 0.0:
 		return
 
 	var origin := camera.global_position
@@ -517,8 +587,11 @@ func _try_start_grapple() -> void:
 		return
 
 	grapple_point = hit_pos
-	grapple_rope_length = maxf(global_position.distance_to(grapple_point), grapple_min_rope_length)
+	grapple_rope_length = global_position.distance_to(grapple_point)
+	if grapple_rope_length < 0.05:
+		return
 	grapple_active = true
+	grapple_cooldown_timer = maxf(grapple_cooldown_seconds, 0.0)
 	grapple_reel_dir = 0.0
 	var latch_dir := _safe_normalized(grapple_point - global_position, Vector3.ZERO)
 	if latch_dir != Vector3.ZERO:
@@ -539,7 +612,7 @@ func _apply_grapple_physics(delta: float, move_direction: Vector3, up_dir: Vecto
 	if distance_to_anchor <= grapple_auto_release_distance:
 		_stop_grapple(true, up_dir, rope_dir)
 		return
-	grapple_rope_length = clampf(grapple_rope_length - grapple_reel_dir * grapple_reel_speed * delta, grapple_min_rope_length, grapple_max_distance)
+	grapple_rope_length = clampf(grapple_rope_length - grapple_reel_dir * grapple_reel_speed * delta, 0.05, grapple_max_distance)
 	var safe_up := _safe_normalized(up_dir, surface_basis.y)
 	var downward_factor := clampf(-rope_dir.dot(safe_up), 0.0, 1.0)
 	var anchor_accel := grapple_anchor_acceleration * (1.0 + downward_factor * grapple_downward_pull_bonus)
@@ -602,6 +675,7 @@ func _ready() -> void:
 	world_border_up = _safe_normalized(surface_basis.y, up_direction)
 	world_border_origin = _snap_position_to_ground_along_up(global_position, world_border_up)
 	_setup_world_border_visual()
+	_border_upright_sync_frames = 8
 	_setup_grapple_visual()
 	_setup_debug_ui()
 	_setup_grapple_crosshair_ui()
@@ -695,6 +769,9 @@ func update_orientation() -> void:
 func _process(delta: float) -> void:
 	# Update orientation every frame to stay aligned with surface
 	update_orientation()
+	if _border_upright_sync_frames > 0:
+		_sync_world_border_upright_from_player(true)
+		_border_upright_sync_frames -= 1
 
 	if camera and camera.is_inside_tree():
 		impact_fov_offset = move_toward(impact_fov_offset, 0.0, impact_fov_return_speed * delta)
@@ -725,6 +802,7 @@ func _process(delta: float) -> void:
 
 func _physics_process(delta: float) -> void:
 	grapple_rehook_timer = maxf(grapple_rehook_timer - delta, 0.0)
+	grapple_cooldown_timer = maxf(grapple_cooldown_timer - delta, 0.0)
 	grapple_reel_dir = move_toward(grapple_reel_dir, 0.0, delta * 4.0)
 
 	if grapple_enabled:

@@ -57,6 +57,6 @@ grow_vertical = 2
 
 [node name="ObjectiveSystem" type="Node3D" parent="." unique_id=564289007]
 script = ExtResource("4_objectives")
-start_time_seconds = 60.0
+start_time_seconds = 6000.0
 
 [editable path="Player"]

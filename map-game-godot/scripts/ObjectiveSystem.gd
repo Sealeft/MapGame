@@ -15,6 +15,9 @@ extends Node3D
 @export var ground_probe_height: float = 500.0
 @export var main_menu_scene_path: String = "res://main_menu.tscn"
 @export var objective_hud_scene: PackedScene = preload("res://ui/objective_hud.tscn")
+@export var compass_half_fov_degrees: float = 90.0
+@export var compass_bar_width: float = 220.0
+@export var compass_bar_height: float = 14.0
 
 var _player: CharacterBody3D
 var _time_remaining: float = 0.0
@@ -23,6 +26,7 @@ var _high_score: int = 0
 var _game_over: bool = false
 
 var _spawn_origin: Vector3 = Vector3.ZERO
+var _spawn_ground_origin: Vector3 = Vector3.ZERO
 var _spawn_right: Vector3 = Vector3.RIGHT
 var _spawn_forward: Vector3 = Vector3.FORWARD
 var _spawn_up: Vector3 = Vector3.UP
@@ -32,10 +36,14 @@ var _world_up: Vector3 = Vector3.UP
 var _checkpoint_root: Node3D
 var _hud_layer: CanvasLayer
 var _hud_label: Label
+var _compass_root: Control
+var _compass_target_marker: ColorRect
+var _compass_center_marker: ColorRect
 var _game_over_panel: PanelContainer
 var _game_over_title: Label
 var _game_over_score: Label
 var _is_transitioning: bool = false
+var _upright_sync_frames: int = 0
 
 func _ready() -> void:
 	randomize()
@@ -45,13 +53,14 @@ func _ready() -> void:
 		return
 
 	_update_spawn_frame_from_player()
-	_world_origin = _spawn_origin
+	_world_origin = _spawn_ground_origin
 	_world_up = _spawn_up
 
 	_time_remaining = start_time_seconds
 	_high_score = _get_current_high_score()
 	_create_hud()
 	_spawn_checkpoint()
+	_upright_sync_frames = 8
 	_update_hud()
 
 func _game_state() -> Node:
@@ -74,6 +83,10 @@ func _submit_high_score_if_needed() -> void:
 	_high_score = maxi(_high_score, _score)
 
 func _process(delta: float) -> void:
+	if _upright_sync_frames > 0:
+		_sync_checkpoint_upright_from_player(true)
+		_upright_sync_frames -= 1
+
 	if _game_over:
 		_update_hud()
 		return
@@ -86,12 +99,27 @@ func _process(delta: float) -> void:
 	_time_remaining = maxf(_time_remaining - delta, 0.0)
 	if _time_remaining <= 0.0:
 		_set_game_over(true)
+	_update_compass()
 	_update_hud()
 
 func _safe_normalized(v: Vector3, fallback: Vector3) -> Vector3:
 	if not v.is_finite() or v.length_squared() < 0.000001:
 		return fallback
 	return v.normalized()
+
+func _sync_checkpoint_upright_from_player(reorient_existing: bool) -> void:
+	if _player == null:
+		return
+	_update_spawn_frame_from_player()
+	_world_up = _spawn_up
+	if reorient_existing and _checkpoint_root != null:
+		var checkpoint_pos := _checkpoint_root.global_position
+		var clamped_pos := _clamp_planar_to_world_border(checkpoint_pos)
+		var grounded_pos := _snap_checkpoint_ground_to_surface(clamped_pos)
+		if grounded_pos.is_finite():
+			checkpoint_pos = grounded_pos
+		var checkpoint_basis := Basis(_spawn_right, _spawn_up, _spawn_forward).orthonormalized()
+		_checkpoint_root.global_transform = Transform3D(checkpoint_basis, checkpoint_pos)
 
 func _create_hud() -> void:
 	if objective_hud_scene != null:
@@ -125,6 +153,8 @@ func _create_hud() -> void:
 
 	if _game_over_panel == null:
 		_create_game_over_ui()
+
+	_create_compass_ui_if_needed()
 
 func _create_game_over_ui() -> void:
 	_game_over_panel = PanelContainer.new()
@@ -178,6 +208,87 @@ func _update_hud() -> void:
 	if _game_over_score:
 		_game_over_score.text = "Score: %d" % _score
 
+func _create_compass_ui_if_needed() -> void:
+	if _hud_layer == null or _compass_root != null:
+		return
+
+	_compass_root = Control.new()
+	_compass_root.name = "CheckpointCompass"
+	_compass_root.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_compass_root.offset_top = 10.0
+	_compass_root.offset_bottom = 38.0
+	_compass_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_layer.add_child(_compass_root)
+
+	var bar_bg := ColorRect.new()
+	bar_bg.name = "CompassBarBg"
+	bar_bg.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	bar_bg.offset_left = -compass_bar_width * 0.5
+	bar_bg.offset_right = compass_bar_width * 0.5
+	bar_bg.offset_top = 10.0
+	bar_bg.offset_bottom = 10.0 + compass_bar_height
+	bar_bg.color = Color(0.05, 0.08, 0.11, 0.58)
+	bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_compass_root.add_child(bar_bg)
+
+	_compass_center_marker = ColorRect.new()
+	_compass_center_marker.name = "CompassCenterMarker"
+	_compass_center_marker.set_anchors_preset(Control.PRESET_CENTER)
+	_compass_center_marker.offset_left = -1.0
+	_compass_center_marker.offset_right = 1.0
+	_compass_center_marker.offset_top = -5.0
+	_compass_center_marker.offset_bottom = 5.0
+	_compass_center_marker.color = Color(0.9, 0.95, 1.0, 0.95)
+	bar_bg.add_child(_compass_center_marker)
+
+	_compass_target_marker = ColorRect.new()
+	_compass_target_marker.name = "CompassTargetMarker"
+	_compass_target_marker.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+	_compass_target_marker.offset_left = -3.0
+	_compass_target_marker.offset_right = 3.0
+	_compass_target_marker.offset_top = -6.0
+	_compass_target_marker.offset_bottom = 6.0
+	_compass_target_marker.position = Vector2(compass_bar_width * 0.5, compass_bar_height * 0.5)
+	_compass_target_marker.color = Color(0.2, 0.95, 1.0, 0.95)
+	bar_bg.add_child(_compass_target_marker)
+
+func _update_compass() -> void:
+	if _compass_root == null or _compass_target_marker == null:
+		return
+
+	if _player == null or _checkpoint_root == null or _game_over:
+		_compass_root.visible = false
+		return
+
+	var checkpoint_center := _checkpoint_root.global_position + _checkpoint_root.global_basis.y * _get_checkpoint_vertical_offset()
+	var to_checkpoint := checkpoint_center - _player.global_position
+	if not to_checkpoint.is_finite() or to_checkpoint.length_squared() < 0.0001:
+		_compass_root.visible = false
+		return
+
+	var up := _safe_normalized(_player.up_direction, Vector3.UP)
+	var right := _safe_normalized(_player.global_basis.x - up * _player.global_basis.x.dot(up), Vector3.RIGHT)
+	var forward := _safe_normalized(-(_player.global_basis.z - up * _player.global_basis.z.dot(up)), Vector3.FORWARD)
+	var planar_dir := to_checkpoint - up * to_checkpoint.dot(up)
+	if planar_dir.length_squared() < 0.0001:
+		_compass_root.visible = false
+		return
+
+	_compass_root.visible = true
+	planar_dir = planar_dir.normalized()
+	var side := planar_dir.dot(right)
+	var fwd := planar_dir.dot(forward)
+	var angle := atan2(side, fwd)
+	var half_fov_rad := deg_to_rad(maxf(compass_half_fov_degrees, 1.0))
+	var normalized := clampf(angle / half_fov_rad, -1.0, 1.0)
+
+	var half_w := compass_bar_width * 0.5
+	_compass_target_marker.position.x = half_w + normalized * half_w
+
+	var frontness := clampf(fwd, -1.0, 1.0)
+	var strength := clampf(frontness * 0.5 + 0.5, 0.25, 1.0)
+	_compass_target_marker.color = Color(0.2, 0.95, 1.0, lerpf(0.45, 0.98, strength))
+
 func _set_game_over(active: bool) -> void:
 	if active:
 		_submit_high_score_if_needed()
@@ -225,7 +336,8 @@ func _get_checkpoint_indicator_text() -> String:
 	if _player == null or _checkpoint_root == null:
 		return "Checkpoint: --"
 
-	var to_checkpoint := _checkpoint_root.global_position - _player.global_position
+	var checkpoint_center := _checkpoint_root.global_position + _checkpoint_root.global_basis.y * _get_checkpoint_vertical_offset()
+	var to_checkpoint := checkpoint_center - _player.global_position
 	if not to_checkpoint.is_finite() or to_checkpoint.length_squared() < 0.0001:
 		return "Checkpoint: --"
 
@@ -254,8 +366,15 @@ func _spawn_checkpoint() -> void:
 		_checkpoint_root.queue_free()
 
 	_update_spawn_frame_from_player()
-	var checkpoint_pos := _find_checkpoint_position()
+	var checkpoint_pos := _find_checkpoint_ground_position()
+	if not checkpoint_pos.is_finite():
+		var emergency_ground := _snap_checkpoint_ground_to_surface(_world_origin)
+		if emergency_ground.is_finite():
+			checkpoint_pos = emergency_ground
+		else:
+			checkpoint_pos = _spawn_ground_origin if _spawn_ground_origin.is_finite() else _spawn_origin
 	var checkpoint_basis := Basis(_spawn_right, _spawn_up, _spawn_forward).orthonormalized()
+	var local_vertical_offset := _get_checkpoint_vertical_offset()
 
 	_checkpoint_root = Node3D.new()
 	_checkpoint_root.name = "Checkpoint"
@@ -269,6 +388,7 @@ func _spawn_checkpoint() -> void:
 	mesh.height = checkpoint_height
 	mesh.radial_segments = 24
 	mesh_instance.mesh = mesh
+	mesh_instance.position = Vector3.UP * local_vertical_offset
 
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -281,6 +401,7 @@ func _spawn_checkpoint() -> void:
 	var area := Area3D.new()
 	area.monitoring = true
 	area.monitorable = true
+	area.position = Vector3.UP * local_vertical_offset
 	area.body_entered.connect(_on_checkpoint_body_entered)
 	_checkpoint_root.add_child(area)
 
@@ -297,6 +418,11 @@ func _update_spawn_frame_from_player() -> void:
 
 	_spawn_origin = _player.global_position
 	_spawn_up = _safe_normalized(_player.up_direction, _spawn_up)
+	var grounded_spawn := _snap_checkpoint_ground_to_surface(_spawn_origin)
+	if grounded_spawn.is_finite():
+		_spawn_ground_origin = grounded_spawn
+	else:
+		_spawn_ground_origin = _spawn_origin
 
 	var right_projected := _player.global_basis.x - _spawn_up * _player.global_basis.x.dot(_spawn_up)
 	_spawn_right = _safe_normalized(right_projected, _spawn_right)
@@ -310,32 +436,47 @@ func _update_spawn_frame_from_player() -> void:
 
 	_spawn_forward = _safe_normalized(_spawn_right.cross(_spawn_up), _spawn_forward)
 
-func _snap_checkpoint_center_to_ground(planar_position: Vector3) -> Vector3:
-	var center_offset := (checkpoint_height * 0.5) - checkpoint_ground_embed_depth
+func _get_checkpoint_vertical_offset() -> float:
+	return maxf((checkpoint_height * 0.5) - checkpoint_ground_embed_depth, 0.0)
+
+func _snap_checkpoint_ground_to_surface(planar_position: Vector3) -> Vector3:
 	if get_world_3d() == null:
-		return planar_position + _spawn_up * center_offset
+		return Vector3(INF, INF, INF)
 
-	var cast_offset := maxf(ground_probe_height, checkpoint_height)
-	var ray_start := planar_position + _spawn_up * cast_offset
-	var ray_end := planar_position - _spawn_up * cast_offset
+	var base_cast_offset := maxf(ground_probe_height, checkpoint_height)
+	var probe_scales := [1.0, 4.0, 12.0]
+	for probe_scale in probe_scales:
+		var cast_offset := base_cast_offset * float(probe_scale)
+		var ray_start := planar_position + _spawn_up * cast_offset
+		var ray_end := planar_position - _spawn_up * cast_offset
 
-	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end)
-	query.collision_mask = ground_collision_mask
-	query.collide_with_bodies = true
-	query.collide_with_areas = false
-	query.exclude = [self]
-	if _player != null:
-		query.exclude.append(_player)
+		var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end)
+		query.collision_mask = ground_collision_mask
+		query.collide_with_bodies = true
+		query.collide_with_areas = false
+		query.exclude = [self]
+		if _player != null:
+			query.exclude.append(_player)
+		if _checkpoint_root != null:
+			query.exclude.append(_checkpoint_root)
 
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if hit.is_empty():
-		return planar_position + _spawn_up * center_offset
+		var hit := get_world_3d().direct_space_state.intersect_ray(query)
+		if hit.is_empty():
+			continue
 
-	var hit_position: Vector3 = hit.position
-	if not hit_position.is_finite():
-		return planar_position + _spawn_up * center_offset
+		var hit_position: Vector3 = hit.position
+		if not hit_position.is_finite():
+			continue
 
-	return hit_position + _spawn_up * center_offset
+		var hit_normal: Vector3 = hit.normal
+		if hit_normal.is_finite() and hit_normal.length_squared() > 0.000001:
+			var up_alignment := hit_normal.normalized().dot(_spawn_up)
+			if up_alignment < 0.12:
+				continue
+
+		return hit_position
+
+	return Vector3(INF, INF, INF)
 
 func _is_within_world_border(point: Vector3) -> bool:
 	var up := _safe_normalized(_world_up, Vector3.UP)
@@ -357,19 +498,33 @@ func _clamp_planar_to_world_border(planar_position: Vector3) -> Vector3:
 		return _world_origin + vertical
 	return _world_origin + vertical + (planar / planar_len) * max_radius
 
-func _find_checkpoint_position() -> Vector3:
+func _find_checkpoint_ground_position() -> Vector3:
+	var base_origin := _spawn_ground_origin if _spawn_ground_origin.is_finite() else _spawn_origin
 	for _attempt in range(max_spawn_attempts):
 		var distance := randf_range(checkpoint_min_distance, checkpoint_spawn_range)
 		var angle := randf_range(0.0, TAU)
 		var planar_dir := _spawn_right * cos(angle) + _spawn_forward * sin(angle)
-		var planar_pos := _spawn_origin + planar_dir * distance
-		var candidate := _snap_checkpoint_center_to_ground(planar_pos)
-		if candidate.distance_to(_spawn_origin) <= checkpoint_spawn_range + 0.1 and _is_within_world_border(candidate):
+		var planar_pos := base_origin + planar_dir * distance
+		planar_pos = _clamp_planar_to_world_border(planar_pos)
+		var candidate := _snap_checkpoint_ground_to_surface(planar_pos)
+		if not candidate.is_finite():
+			continue
+		var to_candidate := candidate - base_origin
+		var planar_to_candidate := to_candidate - _spawn_up * to_candidate.dot(_spawn_up)
+		var planar_distance := planar_to_candidate.length()
+		if planar_distance <= checkpoint_spawn_range + 0.1 and _is_within_world_border(candidate) and planar_distance >= checkpoint_min_distance * 0.7:
 			return candidate
 
-	var fallback_planar := _spawn_origin + _spawn_forward * checkpoint_min_distance
+	var fallback_planar := base_origin + _spawn_forward * checkpoint_min_distance
 	fallback_planar = _clamp_planar_to_world_border(fallback_planar)
-	return _snap_checkpoint_center_to_ground(fallback_planar)
+	var fallback_ground := _snap_checkpoint_ground_to_surface(fallback_planar)
+	if fallback_ground.is_finite():
+		return fallback_ground
+
+	if _spawn_ground_origin.is_finite():
+		return _spawn_ground_origin
+
+	return Vector3(INF, INF, INF)
 
 func _on_checkpoint_body_entered(body: Node) -> void:
 	if _game_over:
