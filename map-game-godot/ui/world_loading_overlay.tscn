@@ -16,7 +16,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0, 0, 0, 0.85)
+color = Color(0.254902, 0.262745, 0.105882, 0.85)
 
 [node name="CenterContainer" type="CenterContainer" parent="Root"]
 anchors_preset = 15
@@ -31,6 +31,7 @@ theme_override_constants/separation = 10
 
 [node name="StatusLabel" type="Label" parent="Root/CenterContainer/VBoxContainer"]
 layout_mode = 2
+theme_override_colors/font_color = Color(0.972549, 0.952941, 0.882353, 1)
 text = "Loading city..."
 horizontal_alignment = 1
 

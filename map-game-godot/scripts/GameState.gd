@@ -24,12 +24,34 @@ const CITIES := {
 		"latitude": 35.6762,
 		"longitude": 139.6503,
 		"altitude": 120.0
+	},
+	"Paris": {
+		"display_name": "Paris, France",
+		"description": "Dense historic core with tight streets and varied rooftop traversal.",
+		"latitude": 48.8566,
+		"longitude": 2.3522,
+		"altitude": 110.0
+	},
+	"London": {
+		"display_name": "London, UK",
+		"description": "Large urban districts with mixed skyline and long movement routes.",
+		"latitude": 51.5074,
+		"longitude": -0.1278,
+		"altitude": 100.0
+	},
+	"Rome": {
+		"display_name": "Rome, Italy",
+		"description": "Historic city layout with layered elevation and landmark sightlines.",
+		"latitude": 41.9028,
+		"longitude": 12.4964,
+		"altitude": 220.0
 	}
 }
 
 var selected_city_name: String = "Belfast"
 var show_world_loading_overlay: bool = false
 var world_loading_overlay_seconds: float = 5.0
+var pending_scene_path: String = ""
 var high_scores_by_map: Dictionary = {}
 
 func _ready() -> void:

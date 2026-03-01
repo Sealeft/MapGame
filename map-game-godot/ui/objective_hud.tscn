@@ -1,14 +1,94 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://bb5ff3gvneykc"]
 
-[node name="ObjectiveHUD" type="CanvasLayer"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.254902, 0.262745, 0.105882, 0.88)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.890196, 0.858824, 0.733333, 0.8)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_normal"]
+bg_color = Color(0.682353, 0.717647, 0.517647, 0.95)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.890196, 0.858824, 0.733333, 0.7)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_pressed"]
+bg_color = Color(0.254902, 0.262745, 0.105882, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.972549, 0.952941, 0.882353, 0.9)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_hover"]
+bg_color = Color(0.890196, 0.858824, 0.733333, 0.98)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.972549, 0.952941, 0.882353, 0.95)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="ObjectiveHUD" type="CanvasLayer" unique_id=1141871181]
 layer = 120
 
-[node name="HudLabel" type="Label" parent="."]
-position = Vector2(12, 12)
-theme_override_font_sizes/font_size = 18
-text = "Time: 0.0\nScore: 0\nCheckpoint: --"
+[node name="HudPanel" type="MarginContainer" parent="." unique_id=1649231177]
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 180.0
+offset_bottom = 100.0
+theme_override_constants/margin_left = 0
+theme_override_constants/margin_top = 0
+theme_override_constants/margin_right = 0
+theme_override_constants/margin_bottom = 0
 
-[node name="GameOverPanel" type="PanelContainer" parent="."]
+[node name="HudInfoContainer" type="VBoxContainer" parent="HudPanel" unique_id=1651801020]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="TimeLabel" type="Label" parent="HudPanel/HudInfoContainer" unique_id=514397640]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.972549, 0.952941, 0.882353, 1)
+theme_override_font_sizes/font_size = 18
+text = "Time: 0.0"
+
+[node name="ScoreLabel" type="Label" parent="HudPanel/HudInfoContainer" unique_id=17009808]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.972549, 0.952941, 0.882353, 1)
+theme_override_font_sizes/font_size = 18
+text = "Score: 0"
+
+[node name="BestLabel" type="Label" parent="HudPanel/HudInfoContainer" unique_id=590202875]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.890196, 0.858824, 0.733333, 1)
+theme_override_font_sizes/font_size = 18
+text = "Best: 0"
+
+[node name="StatusLabel" type="Label" parent="HudPanel/HudInfoContainer" unique_id=1446091413]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.890196, 0.858824, 0.733333, 1)
+theme_override_font_sizes/font_size = 16
+
+[node name="GameOverPanel" type="PanelContainer" parent="." unique_id=1559918090]
 visible = false
 anchors_preset = 8
 anchor_left = 0.5
@@ -19,33 +99,151 @@ offset_left = -180.0
 offset_top = -100.0
 offset_right = 180.0
 offset_bottom = 100.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
-[node name="MarginContainer" type="MarginContainer" parent="GameOverPanel"]
+[node name="GameOverMargin" type="MarginContainer" parent="GameOverPanel" unique_id=1837852500]
 layout_mode = 2
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 14
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 14
 
-[node name="VBoxContainer" type="VBoxContainer" parent="GameOverPanel/MarginContainer"]
+[node name="GameOverContainer" type="VBoxContainer" parent="GameOverPanel/GameOverMargin" unique_id=22672797]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="TitleLabel" type="Label" parent="GameOverPanel/MarginContainer/VBoxContainer"]
+[node name="TitleLabel" type="Label" parent="GameOverPanel/GameOverMargin/GameOverContainer" unique_id=1357542299]
 layout_mode = 2
+theme_override_colors/font_color = Color(0.972549, 0.952941, 0.882353, 1)
 theme_override_font_sizes/font_size = 24
 text = "Game Over"
 horizontal_alignment = 1
 
-[node name="ScoreLabel" type="Label" parent="GameOverPanel/MarginContainer/VBoxContainer"]
+[node name="ScoreLabel" type="Label" parent="GameOverPanel/GameOverMargin/GameOverContainer" unique_id=280533174]
 layout_mode = 2
+theme_override_colors/font_color = Color(0.890196, 0.858824, 0.733333, 1)
 text = "Score: 0"
 horizontal_alignment = 1
 
-[node name="RestartButton" type="Button" parent="GameOverPanel/MarginContainer/VBoxContainer"]
+[node name="RestartButton" type="Button" parent="GameOverPanel/GameOverMargin/GameOverContainer" unique_id=617371169]
 layout_mode = 2
+theme_override_colors/font_color = Color(0.254902, 0.262745, 0.105882, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
 text = "Restart"
 
-[node name="MainMenuButton" type="Button" parent="GameOverPanel/MarginContainer/VBoxContainer"]
+[node name="MainMenuButton" type="Button" parent="GameOverPanel/GameOverMargin/GameOverContainer" unique_id=1724029564]
 layout_mode = 2
+theme_override_colors/font_color = Color(0.254902, 0.262745, 0.105882, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
 text = "Main Menu"
+
+[node name="PausePanel" type="PanelContainer" parent="." unique_id=1826827765]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -170.0
+offset_top = -75.0
+offset_right = 170.0
+offset_bottom = 75.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="PauseMargin" type="MarginContainer" parent="PausePanel" unique_id=1402997281]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 14
+
+[node name="PauseContainer" type="VBoxContainer" parent="PausePanel/PauseMargin" unique_id=2060893005]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TitleLabel" type="Label" parent="PausePanel/PauseMargin/PauseContainer" unique_id=1588025775]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.972549, 0.952941, 0.882353, 1)
+theme_override_font_sizes/font_size = 24
+text = "Paused"
+horizontal_alignment = 1
+
+[node name="ResumeButton" type="Button" parent="PausePanel/PauseMargin/PauseContainer" unique_id=1054523928]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.254902, 0.262745, 0.105882, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+text = "Resume"
+
+[node name="EndGameButton" type="Button" parent="PausePanel/PauseMargin/PauseContainer" unique_id=345272302]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.254902, 0.262745, 0.105882, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+text = "End Game"
+
+[node name="CheckpointCompass" type="Control" parent="." unique_id=1415361200]
+layout_mode = 3
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 10.0
+offset_bottom = 56.0
+grow_horizontal = 2
+mouse_filter = 2
+
+[node name="CompassBarBg" type="ColorRect" parent="CheckpointCompass" unique_id=430098427]
+layout_mode = 0
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -110.0
+offset_right = 110.0
+offset_bottom = 14.0
+grow_horizontal = 2
+mouse_filter = 2
+color = Color(0.254902, 0.262745, 0.105882, 0.7)
+
+[node name="CompassCenterMarker" type="ColorRect" parent="CheckpointCompass/CompassBarBg" unique_id=1522224870]
+layout_mode = 0
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -1.0
+offset_top = -5.0
+offset_right = 1.0
+offset_bottom = 5.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.890196, 0.858824, 0.733333, 0.95)
+
+[node name="CompassTargetMarker" type="ColorRect" parent="CheckpointCompass/CompassBarBg" unique_id=66023121]
+layout_mode = 0
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = -3.0
+offset_top = -6.0
+offset_right = 3.0
+offset_bottom = 6.0
+grow_vertical = 2
+color = Color(0.972549, 0.952941, 0.882353, 0.95)
+
+[node name="CompassDistanceLabel" type="Label" parent="CheckpointCompass" unique_id=1613973955]
+layout_mode = 0
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -60.0
+offset_top = 20.0
+offset_right = 60.0
+offset_bottom = 40.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.972549, 0.952941, 0.882353, 1)
+theme_override_font_sizes/font_size = 14
+text = "--m"
+horizontal_alignment = 1
+vertical_alignment = 1

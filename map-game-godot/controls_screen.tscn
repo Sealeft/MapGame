@@ -18,10 +18,10 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.02, 0.04, 0.08, 1)
+color = Color(0.254902, 0.262745, 0.105882, 1)
 
 [node name="BackgroundGlow" type="ColorRect" parent="."]
-modulate = Color(0.2, 0.45, 0.7, 0.25)
+modulate = Color(0.682353, 0.717647, 0.517647, 0.25)
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -48,7 +48,7 @@ offset_right = 310.0
 offset_bottom = 220.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.05, 0.08, 0.14, 0.82)
+color = Color(0.254902, 0.262745, 0.105882, 0.82)
 
 [node name="CenterContainer" type="CenterContainer" parent="."]
 layout_mode = 1
@@ -66,7 +66,7 @@ theme_override_constants/separation = 12
 [node name="TitleLabel" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 42
-modulate = Color(0.9, 0.96, 1, 1)
+modulate = Color(0.972549, 0.952941, 0.882353, 1)
 text = "Controls"
 horizontal_alignment = 1
 
@@ -75,7 +75,7 @@ custom_minimum_size = Vector2(0, 220)
 layout_mode = 2
 theme_override_font_sizes/normal_font_size = 22
 bbcode_enabled = true
-text = "[center][color=#C9EEFF]Move:[/color] [color=#FFFFFF]W A S D[/color]\n[color=#C9EEFF]Jump:[/color] [color=#FFFFFF]Space[/color]\n[color=#C9EEFF]Sprint:[/color] [color=#FFFFFF]Shift[/color]\n[color=#C9EEFF]Grapple:[/color] [color=#FFFFFF]Right Mouse[/color]\n[color=#C9EEFF]Toggle Mouse:[/color] [color=#FFFFFF]Esc[/color]\n[color=#C9EEFF]Toggle Debug:[/color] [color=#FFFFFF]F3[/color][/center]"
+text = "[center][color=#E3DBBB]Move:[/color] [color=#F8F3E1]W A S D[/color]\n[color=#E3DBBB]Jump:[/color] [color=#F8F3E1]Space[/color]\n[color=#E3DBBB]Sprint:[/color] [color=#F8F3E1]Shift[/color]\n[color=#E3DBBB]Grapple:[/color] [color=#F8F3E1]Right Mouse[/color]\n[color=#E3DBBB]Toggle Mouse:[/color] [color=#F8F3E1]Esc[/color]\n[color=#E3DBBB]Toggle Debug:[/color] [color=#F8F3E1]F3[/color][/center]"
 fit_content = true
 scroll_active = false
 
@@ -83,3 +83,5 @@ scroll_active = false
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 text = "Back"
+
+[connection signal="pressed" from="CenterContainer/VBoxContainer/BackButton" to="." method="_on_back_pressed"]

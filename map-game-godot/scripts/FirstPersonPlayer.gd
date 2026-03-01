@@ -96,6 +96,7 @@ extends CharacterBody3D
 @export var grapple_crosshair_color_valid: Color = Color(0.22, 0.95, 1.0, 0.95)
 @export var grapple_crosshair_color_invalid: Color = Color(1.0, 0.35, 0.35, 0.85)
 @export var grapple_crosshair_color_latched: Color = Color(1.0, 0.9, 0.32, 0.95)
+@export var grapple_crosshair_probe_interval: float = 0.06
 @export var show_debug_text: bool = true
 @export var debug_font_size: int = 14
 
@@ -144,124 +145,31 @@ var grapple_crosshair_h: ColorRect
 var grapple_crosshair_v: ColorRect
 var grapple_indicator_root: Control
 var grapple_indicator_icon: Label
-var grapple_indicator_bar_bg: ColorRect
 var grapple_indicator_bar_fill: ColorRect
+var _grapple_crosshair_probe_timer: float = 0.0
+var _grapple_crosshair_cached_can_grapple: bool = false
+var _grapple_crosshair_cached_valid: bool = false
 
 func _add_impact_fov(amount: float) -> void:
 	impact_fov_offset = clampf(impact_fov_offset + amount, -impact_fov_max_offset, impact_fov_max_offset)
 
 func _setup_world_border_visual() -> void:
-	if not world_border_enabled:
+	var result := PlayerBorderModule.setup_world_border_visual(self, world_border_enabled, world_border_radius, world_border_height, world_border_color, world_border_base_alpha, world_border_visible_arc_degrees, world_border_arc_fade_degrees)
+	if result.is_empty():
 		return
-
-	world_border_mesh_instance = MeshInstance3D.new()
-	world_border_mesh_instance.name = "WorldBorder"
-	world_border_mesh_instance.top_level = true
-	world_border_mesh_instance.visible = false
-
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = world_border_radius
-	mesh.bottom_radius = world_border_radius
-	mesh.height = world_border_height
-	mesh.radial_segments = 96
-	world_border_mesh_instance.mesh = mesh
-
-	var border_shader := Shader.new()
-	border_shader.code = "shader_type spatial;\nrender_mode unshaded, cull_disabled, blend_mix;\n\nuniform vec4 border_color : source_color = vec4(0.25, 0.9, 1.0, 1.0);\nuniform float global_alpha = 0.3;\nuniform float section_center_u = 0.0;\nuniform float section_half_width_u = 0.1;\nuniform float section_feather_u = 0.03;\n\nfloat wrap_dist(float a, float b) {\n\tfloat d = abs(a - b);\n\treturn min(d, 1.0 - d);\n}\n\nvoid fragment() {\n\tfloat d = wrap_dist(UV.x, section_center_u);\n\tfloat feather = max(section_feather_u, 0.0001);\n\tfloat mask = 1.0 - smoothstep(section_half_width_u, section_half_width_u + feather, d);\n\tfloat alpha = border_color.a * global_alpha * mask;\n\tif (alpha < 0.001) {\n\t\tdiscard;\n\t}\n\tALBEDO = border_color.rgb;\n\tALPHA = alpha;\n}\n"
-
-	world_border_material = ShaderMaterial.new()
-	world_border_material.shader = border_shader
-	world_border_material.set_shader_parameter("border_color", world_border_color)
-	world_border_material.set_shader_parameter("global_alpha", world_border_base_alpha)
-	world_border_material.set_shader_parameter("section_center_u", 0.0)
-	world_border_material.set_shader_parameter("section_half_width_u", maxf(world_border_visible_arc_degrees / 360.0, 0.001) * 0.5)
-	world_border_material.set_shader_parameter("section_feather_u", maxf(world_border_arc_fade_degrees / 360.0, 0.001) * 0.5)
-	world_border_mesh_instance.material_override = world_border_material
-
-	add_child(world_border_mesh_instance)
+	world_border_mesh_instance = result.get("mesh_instance", null)
+	world_border_material = result.get("material", null)
 
 func _snap_position_to_ground_along_up(sample_position: Vector3, up: Vector3) -> Vector3:
-	if get_world_3d() == null:
-		return sample_position
-
-	var safe_up := _safe_normalized(up, Vector3.UP)
-	var cast_offset := maxf(world_border_ground_probe_height, world_border_height)
-	var ray_start := sample_position + safe_up * cast_offset
-	var ray_end := sample_position - safe_up * cast_offset
-
-	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end)
-	query.collision_mask = world_border_ground_collision_mask
-	query.collide_with_bodies = true
-	query.collide_with_areas = false
-	query.exclude = [self]
-
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if hit.is_empty():
-		return sample_position
-
-	var hit_position: Vector3 = hit.position
-	if not hit_position.is_finite():
-		return sample_position
-
-	return hit_position
+	return PlayerBorderModule.snap_position_to_ground_along_up(self, sample_position, up, world_border_ground_probe_height, world_border_height, world_border_ground_collision_mask, self)
 
 func _update_world_border_visual() -> void:
-	if not world_border_enabled or world_border_mesh_instance == null:
-		return
-
-	var up := _safe_normalized(world_border_up, Vector3.UP)
-	var reference := Vector3.FORWARD if absf(up.dot(Vector3.FORWARD)) < 0.99 else Vector3.RIGHT
-	var right := _safe_normalized(up.cross(reference), Vector3.RIGHT)
-	var forward := _safe_normalized(right.cross(up), Vector3.FORWARD)
-	var border_basis := Basis(right, up, forward).orthonormalized()
-	var border_center := world_border_origin + up * ((world_border_height * 0.5) - world_border_ground_embed_depth)
-	world_border_mesh_instance.global_transform = Transform3D(border_basis, border_center)
-
-	var to_player := global_position - world_border_origin
-	var planar_to_player := to_player - up * to_player.dot(up)
-	var planar_dist := planar_to_player.length()
-	var border_distance := world_border_radius - planar_dist
-
-	if border_distance > world_border_visible_distance:
-		world_border_mesh_instance.visible = false
-		return
-
-	world_border_mesh_instance.visible = true
-	if world_border_material:
-		var t := clampf(1.0 - (border_distance / maxf(world_border_visible_distance, 0.001)), 0.0, 1.0)
-		var alpha := world_border_base_alpha * t
-		var local_to_player := world_border_mesh_instance.to_local(global_position)
-		local_to_player.y = 0.0
-		var player_u := 0.0
-		if local_to_player.length_squared() > 0.000001:
-			var angle := atan2(local_to_player.z, local_to_player.x)
-			player_u = fposmod((angle / TAU) + 1.0, 1.0)
-
-		world_border_material.set_shader_parameter("border_color", world_border_color)
-		world_border_material.set_shader_parameter("global_alpha", alpha)
-		world_border_material.set_shader_parameter("section_center_u", player_u)
-		world_border_material.set_shader_parameter("section_half_width_u", maxf(world_border_visible_arc_degrees / 360.0, 0.001) * 0.5)
-		world_border_material.set_shader_parameter("section_feather_u", maxf(world_border_arc_fade_degrees / 360.0, 0.001) * 0.5)
+	PlayerBorderModule.update_world_border_visual(world_border_mesh_instance, world_border_material, world_border_enabled, world_border_up, world_border_origin, world_border_height, world_border_ground_embed_depth, world_border_radius, world_border_visible_distance, world_border_base_alpha, world_border_color, world_border_visible_arc_degrees, world_border_arc_fade_degrees, global_position)
 
 func _enforce_world_border() -> void:
-	if not world_border_enabled:
-		return
-
-	var up := _safe_normalized(world_border_up, Vector3.UP)
-	var to_player := global_position - world_border_origin
-	var vertical_component := up * to_player.dot(up)
-	var planar_to_player := to_player - vertical_component
-	var planar_dist := planar_to_player.length()
-	if planar_dist <= world_border_radius:
-		return
-
-	var radial_dir := planar_to_player / maxf(planar_dist, 0.0001)
-	planar_to_player = radial_dir * world_border_radius
-	global_position = world_border_origin + vertical_component + planar_to_player
-
-	var outward_speed := velocity.dot(radial_dir)
-	if outward_speed > 0.0:
-		velocity -= radial_dir * outward_speed
+	var result := PlayerBorderModule.enforce_world_border(world_border_enabled, world_border_up, world_border_origin, world_border_radius, global_position, velocity)
+	global_position = result.get("position", global_position)
+	velocity = result.get("velocity", velocity)
 
 func _sync_world_border_upright_from_player(adjust_origin: bool) -> void:
 	if not world_border_enabled:
@@ -272,30 +180,7 @@ func _sync_world_border_upright_from_player(adjust_origin: bool) -> void:
 	_update_world_border_visual()
 
 func _apply_air_strafe_bonus(horizontal_velocity: Vector3, move_direction: Vector3, up_dir: Vector3, delta: float) -> Vector3:
-	if not air_strafe_enabled or move_direction == Vector3.ZERO:
-		return horizontal_velocity
-
-	var speed := horizontal_velocity.length()
-	if speed < air_strafe_min_speed:
-		return horizontal_velocity
-
-	var vel_dir := horizontal_velocity / speed
-	var alignment := absf(vel_dir.dot(move_direction))
-	if alignment > air_strafe_input_dot_max:
-		return horizontal_velocity
-
-	var right_dir := _safe_normalized(global_basis.x - up_dir * global_basis.x.dot(up_dir), surface_basis.x)
-	var side_input := absf(move_direction.dot(right_dir))
-	var strafe_factor := clampf(1.0 - alignment, 0.0, 1.0) * clampf(side_input, 0.0, 1.0)
-	if strafe_factor <= 0.0001:
-		return horizontal_velocity
-
-	var boosted_velocity := horizontal_velocity + move_direction * (air_strafe_bonus_acceleration * strafe_factor * delta)
-	var speed_cap := maxf(speed, air_strafe_max_bonus_speed)
-	var boosted_speed := boosted_velocity.length()
-	if boosted_speed > speed_cap:
-		boosted_velocity = boosted_velocity / boosted_speed * speed_cap
-	return boosted_velocity
+	return PlayerMovementModule.apply_air_strafe_bonus(horizontal_velocity, move_direction, up_dir, delta, air_strafe_enabled, air_strafe_min_speed, air_strafe_input_dot_max, air_strafe_bonus_acceleration, air_strafe_max_bonus_speed, global_basis, surface_basis)
 
 func _setup_grapple_visual() -> void:
 	if not grapple_rope_visual_enabled:
@@ -358,96 +243,27 @@ func _safe_normalized(v: Vector3, fallback: Vector3) -> Vector3:
 @onready var globe_node: CesiumGeoreference = null
 
 func _setup_debug_ui() -> void:
-	debug_layer = CanvasLayer.new()
-	debug_layer.layer = 100
-	debug_layer.visible = show_debug_text
-	add_child(debug_layer)
-
-	debug_label = Label.new()
-	debug_label.name = "MovementDebugLabel"
-	debug_label.position = Vector2(12, 12)
-	debug_label.add_theme_font_size_override("font_size", debug_font_size)
-	debug_layer.add_child(debug_label)
+	var result := PlayerUiModule.bind_debug_ui(self, show_debug_text, debug_font_size)
+	debug_layer = result.get("debug_layer", null)
+	debug_label = result.get("debug_label", null)
 
 func _setup_grapple_crosshair_ui() -> void:
 	if not grapple_crosshair_enabled:
 		return
-
-	grapple_crosshair_layer = CanvasLayer.new()
-	grapple_crosshair_layer.layer = 110
-	add_child(grapple_crosshair_layer)
-
-	grapple_crosshair_center = Control.new()
-	grapple_crosshair_center.name = "GrappleCrosshair"
-	grapple_crosshair_center.set_anchors_preset(Control.PRESET_CENTER)
-	grapple_crosshair_center.offset_left = -grapple_crosshair_size * 0.5
-	grapple_crosshair_center.offset_top = -grapple_crosshair_size * 0.5
-	grapple_crosshair_center.offset_right = grapple_crosshair_size * 0.5
-	grapple_crosshair_center.offset_bottom = grapple_crosshair_size * 0.5
-	grapple_crosshair_layer.add_child(grapple_crosshair_center)
-
-	grapple_crosshair_h = ColorRect.new()
-	grapple_crosshair_h.color = grapple_crosshair_color_invalid
-	grapple_crosshair_h.size = Vector2(grapple_crosshair_size, grapple_crosshair_thickness)
-	grapple_crosshair_h.position = Vector2(0.0, (grapple_crosshair_size - grapple_crosshair_thickness) * 0.5)
-	grapple_crosshair_center.add_child(grapple_crosshair_h)
-
-	grapple_crosshair_v = ColorRect.new()
-	grapple_crosshair_v.color = grapple_crosshair_color_invalid
-	grapple_crosshair_v.size = Vector2(grapple_crosshair_thickness, grapple_crosshair_size)
-	grapple_crosshair_v.position = Vector2((grapple_crosshair_size - grapple_crosshair_thickness) * 0.5, 0.0)
-	grapple_crosshair_center.add_child(grapple_crosshair_v)
-
-	if grapple_crosshair_gap > 0.0:
-		var half_gap := grapple_crosshair_gap * 0.5
-		grapple_crosshair_h.size.x = maxf(grapple_crosshair_size - grapple_crosshair_gap, 1.0)
-		grapple_crosshair_h.position.x = half_gap
-		grapple_crosshair_v.size.y = maxf(grapple_crosshair_size - grapple_crosshair_gap, 1.0)
-		grapple_crosshair_v.position.y = half_gap
-
-	grapple_indicator_root = Control.new()
-	grapple_indicator_root.name = "GrappleCooldownIndicator"
-	grapple_indicator_root.position = Vector2(-8.0, grapple_crosshair_size + 10.0)
-	grapple_indicator_root.custom_minimum_size = Vector2(56.0, 12.0)
-	grapple_crosshair_center.add_child(grapple_indicator_root)
-
-	grapple_indicator_icon = Label.new()
-	grapple_indicator_icon.name = "GrappleIcon"
-	grapple_indicator_icon.position = Vector2(0.0, -2.0)
-	grapple_indicator_icon.size = Vector2(14.0, 12.0)
-	grapple_indicator_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	grapple_indicator_icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	grapple_indicator_icon.add_theme_font_size_override("font_size", 12)
-	grapple_indicator_icon.text = "⛓"
-	grapple_indicator_root.add_child(grapple_indicator_icon)
-
-	grapple_indicator_bar_bg = ColorRect.new()
-	grapple_indicator_bar_bg.name = "CooldownBarBg"
-	grapple_indicator_bar_bg.position = Vector2(16.0, 3.0)
-	grapple_indicator_bar_bg.size = Vector2(40.0, 6.0)
-	grapple_indicator_bar_bg.color = Color(0.06, 0.08, 0.1, 0.7)
-	grapple_indicator_root.add_child(grapple_indicator_bar_bg)
-
-	grapple_indicator_bar_fill = ColorRect.new()
-	grapple_indicator_bar_fill.name = "CooldownBarFill"
-	grapple_indicator_bar_fill.position = Vector2.ZERO
-	grapple_indicator_bar_fill.size = Vector2(40.0, 6.0)
-	grapple_indicator_bar_fill.color = grapple_crosshair_color_valid
-	grapple_indicator_bar_bg.add_child(grapple_indicator_bar_fill)
+	var result := PlayerUiModule.bind_grapple_crosshair_ui(self, grapple_crosshair_size, grapple_crosshair_thickness, grapple_crosshair_gap, grapple_crosshair_color_invalid, grapple_crosshair_color_valid)
+	grapple_crosshair_layer = result.get("grapple_crosshair_layer", null)
+	grapple_crosshair_center = result.get("grapple_crosshair_center", null)
+	grapple_crosshair_h = result.get("grapple_crosshair_h", null)
+	grapple_crosshair_v = result.get("grapple_crosshair_v", null)
+	grapple_indicator_root = result.get("grapple_indicator_root", null)
+	grapple_indicator_icon = result.get("grapple_indicator_icon", null)
+	grapple_indicator_bar_fill = result.get("grapple_indicator_bar_fill", null)
 
 func _set_grapple_indicator(color: Color, fill_ratio: float) -> void:
-	if grapple_indicator_icon:
-		grapple_indicator_icon.modulate = color
-	if grapple_indicator_bar_fill:
-		grapple_indicator_bar_fill.color = color
-		var ratio := clampf(fill_ratio, 0.0, 1.0)
-		grapple_indicator_bar_fill.size.x = 40.0 * ratio
+	PlayerUiModule.set_grapple_indicator(grapple_indicator_icon, grapple_indicator_bar_fill, color, fill_ratio)
 
 func _set_crosshair_color(color: Color) -> void:
-	if grapple_crosshair_h:
-		grapple_crosshair_h.color = color
-	if grapple_crosshair_v:
-		grapple_crosshair_v.color = color
+	PlayerUiModule.set_crosshair_color(grapple_crosshair_h, grapple_crosshair_v, color)
 
 func _get_center_ray_direction() -> Vector3:
 	if camera == null or not camera.is_inside_tree():
@@ -461,13 +277,14 @@ func _get_center_ray_direction() -> Vector3:
 		return -camera.global_basis.z
 	return dir.normalized()
 
-func _update_grapple_crosshair() -> void:
+func _update_grapple_crosshair(delta: float) -> void:
 	if not grapple_crosshair_enabled or grapple_crosshair_layer == null:
 		return
 
 	var should_show := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and camera != null and camera.is_inside_tree() and grapple_enabled
 	grapple_crosshair_layer.visible = should_show
 	if not should_show:
+		_grapple_crosshair_cached_valid = false
 		return
 	if grapple_active:
 		_set_crosshair_color(grapple_crosshair_color_latched)
@@ -479,14 +296,21 @@ func _update_grapple_crosshair() -> void:
 		var cooldown_total := maxf(grapple_cooldown_seconds, 0.001)
 		var fill_ratio := clampf(1.0 - (grapple_cooldown_timer / cooldown_total), 0.0, 1.0)
 		_set_grapple_indicator(grapple_crosshair_color_invalid, fill_ratio)
+		_grapple_crosshair_cached_valid = false
 		return
 
-	var origin := camera.global_position
-	var center_dir := _get_center_ray_direction()
-	var hit := _cast_grapple_ray(origin, center_dir)
-	var can_grapple := not hit.is_empty()
+	_grapple_crosshair_probe_timer -= delta
+	if _grapple_crosshair_probe_timer <= 0.0 or not _grapple_crosshair_cached_valid:
+		var origin := camera.global_position
+		var center_dir := _get_center_ray_direction()
+		var hit := _cast_grapple_ray(origin, center_dir)
+		_grapple_crosshair_cached_can_grapple = not hit.is_empty()
+		_grapple_crosshair_cached_valid = true
+		_grapple_crosshair_probe_timer = maxf(grapple_crosshair_probe_interval, 0.01)
+
+	var can_grapple := _grapple_crosshair_cached_can_grapple
 	_set_crosshair_color(grapple_crosshair_color_valid if can_grapple else grapple_crosshair_color_invalid)
-	_set_grapple_indicator(grapple_crosshair_color_valid, 1.0)
+	_set_grapple_indicator(grapple_crosshair_color_valid if can_grapple else grapple_crosshair_color_invalid, 1.0)
 
 func _update_debug_text() -> void:
 	if debug_label == null:
@@ -530,40 +354,7 @@ func _stop_grapple(add_detach_boost: bool = false, up_dir: Vector3 = Vector3.UP,
 		grapple_rope_mesh_instance.visible = false
 
 func _cast_grapple_ray(origin: Vector3, direction: Vector3) -> Dictionary:
-	if not direction.is_finite() or direction.length_squared() < 0.000001:
-		return {}
-
-	if get_world_3d() == null:
-		return {}
-
-	var to := origin + direction.normalized() * grapple_max_distance
-	var query := PhysicsRayQueryParameters3D.create(origin, to)
-	query.exclude = [self]
-	query.collision_mask = grapple_collision_mask
-	query.hit_back_faces = false
-	query.hit_from_inside = false
-	query.collide_with_areas = false
-	query.collide_with_bodies = true
-
-	var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(query)
-	if hit.is_empty():
-		return {}
-
-	var hit_pos: Vector3 = hit.position
-	if not hit_pos.is_finite():
-		return {}
-
-	var hit_distance: float = origin.distance_to(hit_pos)
-	if hit_distance < grapple_min_hit_distance:
-		return {}
-
-	var hit_normal: Vector3 = hit.normal
-	if hit_normal.is_finite() and hit_normal.length_squared() > 0.000001:
-		var ray_dir := direction.normalized()
-		if hit_normal.dot(ray_dir) > -0.02:
-			return {}
-
-	return hit
+	return PlayerGrappleModule.cast_grapple_ray(self, self, origin, direction, grapple_max_distance, grapple_min_hit_distance, grapple_collision_mask)
 
 func _find_best_grapple_hit() -> Dictionary:
 	if camera == null or not camera.is_inside_tree():
@@ -701,47 +492,7 @@ func _input(event: InputEvent) -> void:
 			debug_layer.visible = show_debug_text
 
 func calculate_surface_basis() -> Basis:
-	if not globe_node or not globe_node.is_inside_tree():
-		return surface_basis
-	
-	var cam_ecef_pos: Vector3
-	if globe_node.origin_type == CesiumGeoreference.OriginType.CartographicOrigin:
-		cam_ecef_pos = Vector3(globe_node.ecefX, globe_node.ecefY, globe_node.ecefZ)
-	else:
-		cam_ecef_pos = globe_node.get_tx_engine_to_ecef() * global_position
-	
-	var up: Vector3 = globe_node.get_normal_at_surface_pos(cam_ecef_pos)
-	if not up.is_finite() or up.length_squared() < 0.000001:
-		return surface_basis
-	up = up.normalized()
-	
-	var reference := -global_basis.z
-	
-	# Avoid colinear reference vectors (both same and opposite direction).
-	if absf(up.dot(reference)) > 0.99:
-		reference = global_basis.x
-	
-	# Calculate right vector using cross product.
-	var right := up.cross(reference)
-	if right.length_squared() < 0.000001:
-		reference = Vector3.FORWARD if absf(up.dot(Vector3.FORWARD)) < 0.99 else Vector3.RIGHT
-		right = up.cross(reference)
-		if right.length_squared() < 0.000001:
-			return surface_basis
-	right = _safe_normalized(right, surface_basis.x)
-	
-	# Calculate forward vector using cross product of right and up.
-	var forward := right.cross(up)
-	if forward.length_squared() < 0.000001:
-		return surface_basis
-	forward = _safe_normalized(forward, -surface_basis.z)
-	
-	var result := Basis(right, up, -forward)
-	if not result.x.is_finite() or not result.y.is_finite() or not result.z.is_finite():
-		return surface_basis
-	if absf(result.determinant()) < 0.000001:
-		return surface_basis
-	return result
+	return PlayerMovementModule.calculate_surface_basis(globe_node, surface_basis, global_basis, global_position)
 
 func update_orientation() -> void:
 	surface_basis = calculate_surface_basis()
@@ -795,7 +546,7 @@ func _process(delta: float) -> void:
 
 	_update_grapple_visual()
 	_update_world_border_visual()
-	_update_grapple_crosshair()
+	_update_grapple_crosshair(delta)
 
 	_update_debug_text()
 

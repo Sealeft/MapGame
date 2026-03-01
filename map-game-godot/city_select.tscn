@@ -3,48 +3,48 @@
 [ext_resource type="Script" uid="uid://b2o27d4dk6pun" path="res://scripts/CitySelect.gd" id="1"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_option_normal"]
-bg_color = Color(0.09, 0.14, 0.22, 0.95)
+bg_color = Color(0.682353, 0.717647, 0.517647, 0.95)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.52, 0.77, 0.98, 0.45)
+border_color = Color(0.890196, 0.858824, 0.733333, 0.65)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_normal"]
-bg_color = Color(0.17, 0.25, 0.38, 0.95)
+bg_color = Color(0.682353, 0.717647, 0.517647, 0.95)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.46, 0.73, 0.95, 0.5)
+border_color = Color(0.890196, 0.858824, 0.733333, 0.7)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_pressed"]
-bg_color = Color(0.14, 0.2, 0.3, 1)
+bg_color = Color(0.254902, 0.262745, 0.105882, 1)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.55, 0.82, 0.98, 0.85)
+border_color = Color(0.972549, 0.952941, 0.882353, 0.9)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_hover"]
-bg_color = Color(0.23, 0.35, 0.52, 0.98)
+bg_color = Color(0.890196, 0.858824, 0.733333, 0.98)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.61, 0.85, 1, 0.75)
+border_color = Color(0.972549, 0.952941, 0.882353, 0.95)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -56,7 +56,7 @@ border_width_left = 2
 border_width_top = 2
 border_width_right = 2
 border_width_bottom = 2
-border_color = Color(0.74, 0.92, 1, 0.95)
+border_color = Color(0.972549, 0.952941, 0.882353, 0.95)
 corner_radius_top_left = 10
 corner_radius_top_right = 10
 corner_radius_bottom_right = 10
@@ -78,10 +78,10 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.02, 0.04, 0.08, 1)
+color = Color(0.254902, 0.262745, 0.105882, 1)
 
 [node name="BackgroundGlow" type="ColorRect" parent="." unique_id=1233075454]
-modulate = Color(0.24, 0.49, 0.75, 0.22)
+modulate = Color(0.682353, 0.717647, 0.517647, 0.22)
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -108,7 +108,7 @@ offset_right = 280.0
 offset_bottom = 220.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.05, 0.08, 0.14, 0.82)
+color = Color(0.254902, 0.262745, 0.105882, 0.82)
 
 [node name="CenterContainer" type="CenterContainer" parent="." unique_id=1704435657]
 layout_mode = 1
@@ -124,7 +124,7 @@ layout_mode = 2
 theme_override_constants/separation = 12
 
 [node name="TitleLabel" type="Label" parent="CenterContainer/VBoxContainer" unique_id=2042846909]
-modulate = Color(0.9, 0.96, 1, 1)
+modulate = Color(0.972549, 0.952941, 0.882353, 1)
 layout_mode = 2
 theme_override_font_sizes/font_size = 36
 text = "Select City"
@@ -133,11 +133,11 @@ horizontal_alignment = 1
 [node name="CityOptionButton" type="OptionButton" parent="CenterContainer/VBoxContainer" unique_id=696528720]
 custom_minimum_size = Vector2(0, 42)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.93, 0.98, 1, 1)
+theme_override_colors/font_color = Color(0.254902, 0.262745, 0.105882, 1)
 theme_override_styles/normal = SubResource("StyleBoxFlat_option_normal")
 
 [node name="CityDetailsLabel" type="Label" parent="CenterContainer/VBoxContainer" unique_id=2102770881]
-modulate = Color(0.75, 0.86, 0.96, 1)
+modulate = Color(0.890196, 0.858824, 0.733333, 1)
 custom_minimum_size = Vector2(0, 84)
 layout_mode = 2
 horizontal_alignment = 1
@@ -147,7 +147,7 @@ autowrap_mode = 3
 [node name="PlayButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=1192968516]
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.93, 0.98, 1, 1)
+theme_override_colors/font_color = Color(0.254902, 0.262745, 0.105882, 1)
 theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
@@ -157,9 +157,13 @@ text = "Play"
 [node name="BackButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=180226207]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.93, 0.98, 1, 1)
+theme_override_colors/font_color = Color(0.254902, 0.262745, 0.105882, 1)
 theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
 theme_override_styles/focus = SubResource("StyleBoxFlat_btn_focus")
 text = "Back"
+
+[connection signal="item_selected" from="CenterContainer/VBoxContainer/CityOptionButton" to="." method="_on_city_selected"]
+[connection signal="pressed" from="CenterContainer/VBoxContainer/PlayButton" to="." method="_on_play_pressed"]
+[connection signal="pressed" from="CenterContainer/VBoxContainer/BackButton" to="." method="_on_back_pressed"]

@@ -21,11 +21,11 @@ altitude = 100.0
 transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0, 0)
 
 [node name="Google Photorealistic 3D Tiles" type="Cesium3DTileset" parent="CesiumGeoreference" unique_id=1796547288]
-loading_descendant_limit = 32
+loading_descendant_limit = 64
 generate_missing_normals_smooth = true
 ion_asset_id = 2275207
-maximum_culling_distance = 500.0
-collision_range = 200.0
+maximum_culling_distance = 700.0
+collision_range = 350.0
 transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0)
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=931314922]
@@ -36,8 +36,10 @@ light_energy = 8.0
 move_speed = 10.0
 sprint_speed = 15.0
 jump_velocity = 6.0
+world_border_radius = 300.0
 sprint_fov_boost = 15.0
 sprint_fov_lerp_speed = 20.0
+show_debug_text = false
 
 [node name="CesiumStaticCamera" parent="Player" index="1" unique_id=1518887899 node_paths=PackedStringArray("globe_node", "tilesets")]
 static_near_plane = 0.1
@@ -54,9 +56,28 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 
 [node name="ObjectiveSystem" type="Node3D" parent="." unique_id=564289007]
 script = ExtResource("4_objectives")
-start_time_seconds = 60.0
+start_time_seconds = 20.0
+checkpoint_spawn_range = 320.0
+world_border_radius = 300.0
+
+[node name="FpsLayer" type="CanvasLayer" parent="." unique_id=2050662390]
+layer = 210
+
+[node name="FpsCounter" type="Label" parent="FpsLayer" unique_id=1857488191]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -140.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 34.0
+grow_horizontal = 0
+theme_override_font_sizes/font_size = 16
+text = "FPS: --"
+horizontal_alignment = 2
 
 [editable path="Player"]

@@ -18,3 +18,70 @@ shape = SubResource("CapsuleShape3D_player")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
 current = true
 script = ExtResource("2_static_cam")
+
+[node name="PlayerDebugLayer" type="CanvasLayer" parent="."]
+layer = 100
+
+[node name="MovementDebugLabel" type="Label" parent="PlayerDebugLayer"]
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 360.0
+offset_bottom = 180.0
+theme_override_font_sizes/font_size = 14
+
+[node name="GrappleCrosshairLayer" type="CanvasLayer" parent="."]
+layer = 110
+
+[node name="GrappleCrosshair" type="Control" parent="GrappleCrosshairLayer"]
+layout_mode = 3
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -6.0
+offset_top = -6.0
+offset_right = 6.0
+offset_bottom = 6.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CrosshairH" type="ColorRect" parent="GrappleCrosshairLayer/GrappleCrosshair"]
+offset_top = 5.0
+offset_right = 12.0
+offset_bottom = 7.0
+color = Color(1, 0.35, 0.35, 0.85)
+
+[node name="CrosshairV" type="ColorRect" parent="GrappleCrosshairLayer/GrappleCrosshair"]
+offset_left = 5.0
+offset_right = 7.0
+offset_bottom = 12.0
+color = Color(1, 0.35, 0.35, 0.85)
+
+[node name="GrappleCooldownIndicator" type="Control" parent="GrappleCrosshairLayer/GrappleCrosshair"]
+offset_left = -8.0
+offset_top = 22.0
+offset_right = 48.0
+offset_bottom = 34.0
+custom_minimum_size = Vector2(56, 12)
+
+[node name="GrappleIcon" type="Label" parent="GrappleCrosshairLayer/GrappleCrosshair/GrappleCooldownIndicator"]
+offset_top = -2.0
+offset_right = 14.0
+offset_bottom = 10.0
+theme_override_font_sizes/font_size = 12
+text = "⛓"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CooldownBarBg" type="ColorRect" parent="GrappleCrosshairLayer/GrappleCrosshair/GrappleCooldownIndicator"]
+offset_left = 16.0
+offset_top = 3.0
+offset_right = 56.0
+offset_bottom = 9.0
+color = Color(0.06, 0.08, 0.1, 0.7)
+
+[node name="CooldownBarFill" type="ColorRect" parent="GrappleCrosshairLayer/GrappleCrosshair/GrappleCooldownIndicator/CooldownBarBg"]
+offset_right = 40.0
+offset_bottom = 6.0
+color = Color(0.22, 0.95, 1, 0.95)

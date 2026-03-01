@@ -1,5 +1,13 @@
 extends Node3D
 
+enum GamePhase {
+	LOADING,
+	PLAYING,
+	PAUSED,
+	GAME_OVER,
+	TRANSITIONING
+}
+
 @export var player_path: NodePath = NodePath("../Player")
 @export var start_time_seconds: float = 90.0
 @export var checkpoint_time_bonus_seconds: float = 12.0
@@ -9,21 +17,26 @@ extends Node3D
 @export var checkpoint_radius: float = 9.0
 @export var checkpoint_height: float = 120.0
 @export var checkpoint_ground_embed_depth: float = 3.0
+@export var checkpoint_border_margin: float = 10.0
 @export var max_spawn_attempts: int = 24
 @export var world_border_radius: float = 200.0
 @export_flags_3d_physics var ground_collision_mask: int = 1
 @export var ground_probe_height: float = 500.0
 @export var main_menu_scene_path: String = "res://main_menu.tscn"
+@export var world_scene_path: String = "res://node_3d.tscn"
+@export var transition_bridge_scene_path: String = "res://transition_bridge.tscn"
 @export var objective_hud_scene: PackedScene = preload("res://ui/objective_hud.tscn")
 @export var compass_half_fov_degrees: float = 90.0
 @export var compass_bar_width: float = 220.0
 @export var compass_bar_height: float = 14.0
+@export var hud_refresh_interval: float = 0.08
+@export var first_checkpoint_spawn_delay_after_unlock: float = 0.25
 
 var _player: CharacterBody3D
 var _time_remaining: float = 0.0
 var _score: int = 0
 var _high_score: int = 0
-var _game_over: bool = false
+var _phase: int = GamePhase.LOADING
 
 var _spawn_origin: Vector3 = Vector3.ZERO
 var _spawn_ground_origin: Vector3 = Vector3.ZERO
@@ -35,15 +48,20 @@ var _world_up: Vector3 = Vector3.UP
 
 var _checkpoint_root: Node3D
 var _hud_layer: CanvasLayer
-var _hud_label: Label
+var _hud_time_label: Label
+var _hud_score_label: Label
+var _hud_best_label: Label
+var _hud_status_label: Label
 var _compass_root: Control
 var _compass_target_marker: ColorRect
-var _compass_center_marker: ColorRect
+var _compass_distance_label: Label
 var _game_over_panel: PanelContainer
-var _game_over_title: Label
 var _game_over_score: Label
-var _is_transitioning: bool = false
+var _pause_panel: PanelContainer
 var _upright_sync_frames: int = 0
+var _hud_refresh_timer: float = 0.0
+var _initial_checkpoint_spawned: bool = false
+var _initial_checkpoint_ready_timer: float = 0.0
 
 func _ready() -> void:
 	randomize()
@@ -58,8 +76,10 @@ func _ready() -> void:
 
 	_time_remaining = start_time_seconds
 	_high_score = _get_current_high_score()
+	_phase = GamePhase.LOADING
+	_initial_checkpoint_spawned = false
+	_initial_checkpoint_ready_timer = 0.0
 	_create_hud()
-	_spawn_checkpoint()
 	_upright_sync_frames = 8
 	_update_hud()
 
@@ -82,25 +102,77 @@ func _submit_high_score_if_needed() -> void:
 	state.submit_score(_score)
 	_high_score = maxi(_high_score, _score)
 
+func _is_phase(phase: int) -> bool:
+	return _phase == phase
+
+func _set_phase(phase: int) -> void:
+	_phase = phase
+
 func _process(delta: float) -> void:
+	if _is_phase(GamePhase.PLAYING) and Input.is_action_just_pressed("ui_cancel"):
+		_toggle_pause_menu()
+
 	if _upright_sync_frames > 0:
 		_sync_checkpoint_upright_from_player(true)
 		_upright_sync_frames -= 1
 
-	if _game_over:
-		_update_hud()
+	if _is_phase(GamePhase.PAUSED):
+		_update_compass()
+		_hud_refresh_timer = maxf(_hud_refresh_timer - delta, 0.0)
+		if _hud_refresh_timer <= 0.0:
+			_update_hud()
+			_hud_refresh_timer = maxf(hud_refresh_interval, 0.01)
 		return
+
+	if _is_phase(GamePhase.GAME_OVER):
+		_update_compass()
+		_hud_refresh_timer = maxf(_hud_refresh_timer - delta, 0.0)
+		if _hud_refresh_timer <= 0.0:
+			_update_hud()
+			_hud_refresh_timer = maxf(hud_refresh_interval, 0.01)
+		return
+
+	if _is_phase(GamePhase.TRANSITIONING):
+		return
+
 	if _player == null:
+		if not _is_phase(GamePhase.GAME_OVER):
+			_set_phase(GamePhase.LOADING)
+		_initial_checkpoint_ready_timer = 0.0
 		return
 	if not _player.is_physics_processing():
-		_update_hud()
+		if not _is_phase(GamePhase.GAME_OVER):
+			_set_phase(GamePhase.LOADING)
+		_initial_checkpoint_ready_timer = 0.0
+		_hud_refresh_timer = maxf(_hud_refresh_timer - delta, 0.0)
+		if _hud_refresh_timer <= 0.0:
+			_update_hud()
+			_hud_refresh_timer = maxf(hud_refresh_interval, 0.01)
+		return
+	if not _initial_checkpoint_spawned:
+		_initial_checkpoint_ready_timer += delta
+		if _initial_checkpoint_ready_timer >= maxf(first_checkpoint_spawn_delay_after_unlock, 0.0):
+			_spawn_checkpoint()
+			_initial_checkpoint_spawned = _checkpoint_root != null
+	if _initial_checkpoint_spawned and _is_phase(GamePhase.LOADING):
+		_set_phase(GamePhase.PLAYING)
+
+	if not _is_phase(GamePhase.PLAYING):
+		_update_compass()
+		_hud_refresh_timer = maxf(_hud_refresh_timer - delta, 0.0)
+		if _hud_refresh_timer <= 0.0:
+			_update_hud()
+			_hud_refresh_timer = maxf(hud_refresh_interval, 0.01)
 		return
 
 	_time_remaining = maxf(_time_remaining - delta, 0.0)
 	if _time_remaining <= 0.0:
 		_set_game_over(true)
 	_update_compass()
-	_update_hud()
+	_hud_refresh_timer = maxf(_hud_refresh_timer - delta, 0.0)
+	if _hud_refresh_timer <= 0.0:
+		_update_hud()
+		_hud_refresh_timer = maxf(hud_refresh_interval, 0.01)
 
 func _safe_normalized(v: Vector3, fallback: Vector3) -> Vector3:
 	if not v.is_finite() or v.length_squared() < 0.000001:
@@ -127,136 +199,66 @@ func _create_hud() -> void:
 		if hud_instance is CanvasLayer:
 			_hud_layer = hud_instance as CanvasLayer
 			add_child(_hud_layer)
-
 	if _hud_layer == null:
-		_hud_layer = CanvasLayer.new()
-		_hud_layer.layer = 120
-		add_child(_hud_layer)
+		push_warning("Objective HUD scene is missing; ObjectiveSystem UI will be disabled.")
+		return
 
-	_hud_label = _hud_layer.get_node_or_null("HudLabel") as Label
-	if _hud_label == null:
-		_hud_label = Label.new()
-		_hud_label.position = Vector2(12, 12)
-		_hud_label.add_theme_font_size_override("font_size", 18)
-		_hud_layer.add_child(_hud_label)
+	_hud_time_label = _hud_layer.get_node_or_null("HudPanel/HudInfoContainer/TimeLabel") as Label
+	_hud_score_label = _hud_layer.get_node_or_null("HudPanel/HudInfoContainer/ScoreLabel") as Label
+	_hud_best_label = _hud_layer.get_node_or_null("HudPanel/HudInfoContainer/BestLabel") as Label
+	_hud_status_label = _hud_layer.get_node_or_null("HudPanel/HudInfoContainer/StatusLabel") as Label
 
 	_game_over_panel = _hud_layer.get_node_or_null("GameOverPanel") as PanelContainer
-	_game_over_title = _hud_layer.get_node_or_null("GameOverPanel/MarginContainer/VBoxContainer/TitleLabel") as Label
-	_game_over_score = _hud_layer.get_node_or_null("GameOverPanel/MarginContainer/VBoxContainer/ScoreLabel") as Label
-	var restart_button := _hud_layer.get_node_or_null("GameOverPanel/MarginContainer/VBoxContainer/RestartButton") as Button
-	var menu_button := _hud_layer.get_node_or_null("GameOverPanel/MarginContainer/VBoxContainer/MainMenuButton") as Button
+	_game_over_score = _hud_layer.get_node_or_null("GameOverPanel/GameOverMargin/GameOverContainer/ScoreLabel") as Label
+	_pause_panel = _hud_layer.get_node_or_null("PausePanel") as PanelContainer
+	var restart_button := _hud_layer.get_node_or_null("GameOverPanel/GameOverMargin/GameOverContainer/RestartButton") as Button
+	var menu_button := _hud_layer.get_node_or_null("GameOverPanel/GameOverMargin/GameOverContainer/MainMenuButton") as Button
+	var resume_button := _hud_layer.get_node_or_null("PausePanel/PauseMargin/PauseContainer/ResumeButton") as Button
+	var end_game_button := _hud_layer.get_node_or_null("PausePanel/PauseMargin/PauseContainer/EndGameButton") as Button
+	_compass_root = _hud_layer.get_node_or_null("CheckpointCompass") as Control
+	_compass_target_marker = _hud_layer.get_node_or_null("CheckpointCompass/CompassBarBg/CompassTargetMarker") as ColorRect
+	_compass_distance_label = _hud_layer.get_node_or_null("CheckpointCompass/CompassDistanceLabel") as Label
 
 	if restart_button and not restart_button.pressed.is_connected(_on_restart_pressed):
 		restart_button.pressed.connect(_on_restart_pressed)
 	if menu_button and not menu_button.pressed.is_connected(_on_main_menu_pressed):
 		menu_button.pressed.connect(_on_main_menu_pressed)
+	if resume_button and not resume_button.pressed.is_connected(_on_resume_pressed):
+		resume_button.pressed.connect(_on_resume_pressed)
+	if end_game_button and not end_game_button.pressed.is_connected(_on_end_game_pressed):
+		end_game_button.pressed.connect(_on_end_game_pressed)
 
-	if _game_over_panel == null:
-		_create_game_over_ui()
-
-	_create_compass_ui_if_needed()
-
-func _create_game_over_ui() -> void:
-	_game_over_panel = PanelContainer.new()
-	_game_over_panel.visible = false
-	_game_over_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_game_over_panel.custom_minimum_size = Vector2(360, 180)
-	_hud_layer.add_child(_game_over_panel)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 16)
-	margin.add_theme_constant_override("margin_right", 16)
-	margin.add_theme_constant_override("margin_top", 14)
-	margin.add_theme_constant_override("margin_bottom", 14)
-	_game_over_panel.add_child(margin)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 8)
-	margin.add_child(vbox)
-
-	_game_over_title = Label.new()
-	_game_over_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_game_over_title.add_theme_font_size_override("font_size", 24)
-	_game_over_title.text = "Game Over"
-	vbox.add_child(_game_over_title)
-
-	_game_over_score = Label.new()
-	_game_over_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_game_over_score.text = "Score: 0"
-	vbox.add_child(_game_over_score)
-
-	var restart_button := Button.new()
-	restart_button.text = "Restart"
-	restart_button.pressed.connect(_on_restart_pressed)
-	vbox.add_child(restart_button)
-
-	var menu_button := Button.new()
-	menu_button.text = "Main Menu"
-	menu_button.pressed.connect(_on_main_menu_pressed)
-	vbox.add_child(menu_button)
+	if _compass_root:
+		_compass_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_compass_root.visible = true
 
 func _update_hud() -> void:
-	if _hud_label == null:
+	if _hud_time_label == null or _hud_score_label == null or _hud_best_label == null:
 		return
 
-	var checkpoint_line := _get_checkpoint_indicator_text()
-	if _game_over:
-		_hud_label.text = "Time: 0.0\nScore: %d\nBest: %d\nObjective failed\n%s" % [_score, _high_score, checkpoint_line]
-	else:
-		_hud_label.text = "Time: %.1f\nScore: %d\nBest: %d\n%s" % [_time_remaining, _score, _high_score, checkpoint_line]
+	var time_text := "Time: 0.0" if _is_phase(GamePhase.GAME_OVER) else "Time: %.1f" % _time_remaining
+	var score_text := "Score: %d" % _score
+	var best_text := "Best: %d" % _high_score
+	var status_text := "Objective failed" if _is_phase(GamePhase.GAME_OVER) else ""
+
+	if _hud_time_label.text != time_text:
+		_hud_time_label.text = time_text
+	if _hud_score_label.text != score_text:
+		_hud_score_label.text = score_text
+	if _hud_best_label.text != best_text:
+		_hud_best_label.text = best_text
+	if _hud_status_label and _hud_status_label.text != status_text:
+		_hud_status_label.text = status_text
 
 	if _game_over_score:
-		_game_over_score.text = "Score: %d" % _score
-
-func _create_compass_ui_if_needed() -> void:
-	if _hud_layer == null or _compass_root != null:
-		return
-
-	_compass_root = Control.new()
-	_compass_root.name = "CheckpointCompass"
-	_compass_root.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_compass_root.offset_top = 10.0
-	_compass_root.offset_bottom = 38.0
-	_compass_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hud_layer.add_child(_compass_root)
-
-	var bar_bg := ColorRect.new()
-	bar_bg.name = "CompassBarBg"
-	bar_bg.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	bar_bg.offset_left = -compass_bar_width * 0.5
-	bar_bg.offset_right = compass_bar_width * 0.5
-	bar_bg.offset_top = 10.0
-	bar_bg.offset_bottom = 10.0 + compass_bar_height
-	bar_bg.color = Color(0.05, 0.08, 0.11, 0.58)
-	bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_compass_root.add_child(bar_bg)
-
-	_compass_center_marker = ColorRect.new()
-	_compass_center_marker.name = "CompassCenterMarker"
-	_compass_center_marker.set_anchors_preset(Control.PRESET_CENTER)
-	_compass_center_marker.offset_left = -1.0
-	_compass_center_marker.offset_right = 1.0
-	_compass_center_marker.offset_top = -5.0
-	_compass_center_marker.offset_bottom = 5.0
-	_compass_center_marker.color = Color(0.9, 0.95, 1.0, 0.95)
-	bar_bg.add_child(_compass_center_marker)
-
-	_compass_target_marker = ColorRect.new()
-	_compass_target_marker.name = "CompassTargetMarker"
-	_compass_target_marker.set_anchors_preset(Control.PRESET_CENTER_LEFT)
-	_compass_target_marker.offset_left = -3.0
-	_compass_target_marker.offset_right = 3.0
-	_compass_target_marker.offset_top = -6.0
-	_compass_target_marker.offset_bottom = 6.0
-	_compass_target_marker.position = Vector2(compass_bar_width * 0.5, compass_bar_height * 0.5)
-	_compass_target_marker.color = Color(0.2, 0.95, 1.0, 0.95)
-	bar_bg.add_child(_compass_target_marker)
+		if _game_over_score.text != score_text:
+			_game_over_score.text = score_text
 
 func _update_compass() -> void:
 	if _compass_root == null or _compass_target_marker == null:
 		return
 
-	if _player == null or _checkpoint_root == null or _game_over:
+	if _player == null or _checkpoint_root == null or _is_phase(GamePhase.GAME_OVER):
 		_compass_root.visible = false
 		return
 
@@ -275,6 +277,8 @@ func _update_compass() -> void:
 		return
 
 	_compass_root.visible = true
+	if _compass_distance_label:
+		_compass_distance_label.text = "%.0fm" % to_checkpoint.length()
 	planar_dir = planar_dir.normalized()
 	var side := planar_dir.dot(right)
 	var fwd := planar_dir.dot(forward)
@@ -291,12 +295,44 @@ func _update_compass() -> void:
 
 func _set_game_over(active: bool) -> void:
 	if active:
+		_set_paused(false)
+	if active:
 		_submit_high_score_if_needed()
-	_game_over = active
+	_set_phase(GamePhase.GAME_OVER if active else GamePhase.PLAYING)
 	_set_player_locked(active)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if active else Input.MOUSE_MODE_CAPTURED
 	if _game_over_panel:
 		_game_over_panel.visible = active
+		if active:
+			_game_over_panel.move_to_front()
+	if _pause_panel:
+		_pause_panel.visible = false
+
+func _toggle_pause_menu() -> void:
+	if _is_phase(GamePhase.PLAYING):
+		_set_paused(true)
+	elif _is_phase(GamePhase.PAUSED):
+		_set_paused(false)
+
+func _set_paused(paused: bool) -> void:
+	if _is_phase(GamePhase.GAME_OVER) or _is_phase(GamePhase.TRANSITIONING):
+		paused = false
+	if paused:
+		_set_phase(GamePhase.PAUSED)
+	elif _is_phase(GamePhase.PAUSED):
+		_set_phase(GamePhase.PLAYING)
+	_set_player_locked(paused)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if paused else Input.MOUSE_MODE_CAPTURED
+	if _pause_panel:
+		_pause_panel.visible = paused
+		if paused:
+			_pause_panel.move_to_front()
+
+func _on_resume_pressed() -> void:
+	_set_paused(false)
+
+func _on_end_game_pressed() -> void:
+	_set_game_over(true)
 
 func _set_player_locked(locked: bool) -> void:
 	if _player == null:
@@ -306,60 +342,63 @@ func _set_player_locked(locked: bool) -> void:
 	_player.set_process_input(not locked)
 
 func _on_restart_pressed() -> void:
-	if get_tree() == null or _is_transitioning:
+	var tree := get_tree()
+	if tree == null or _is_phase(GamePhase.TRANSITIONING):
 		return
-	_is_transitioning = true
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	var state := get_node_or_null("/root/GameState")
-	if state and state.has_method("get"):
-		state.show_world_loading_overlay = false
-	Input.flush_buffered_events()
-	call_deferred("_deferred_change_scene", "res://node_3d.tscn")
+
+	var restart_path := world_scene_path
+	if tree.current_scene != null and not tree.current_scene.scene_file_path.is_empty():
+		restart_path = tree.current_scene.scene_file_path
+	if restart_path.is_empty():
+		restart_path = "res://node_3d.tscn"
+
+	_begin_scene_transition(restart_path, false, Input.MOUSE_MODE_CAPTURED)
 
 func _on_main_menu_pressed() -> void:
-	if get_tree() == null or _is_transitioning:
+	if get_tree() == null or _is_phase(GamePhase.TRANSITIONING):
 		return
-	_is_transitioning = true
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	Input.flush_buffered_events()
-	call_deferred("_deferred_change_scene", main_menu_scene_path)
+	_begin_scene_transition(main_menu_scene_path, false, Input.MOUSE_MODE_VISIBLE)
 
-func _deferred_change_scene(scene_path: String) -> void:
-	if get_tree() == null:
-		_is_transitioning = false
+func _begin_scene_transition(scene_path: String, show_loading_overlay: bool, mouse_mode: Input.MouseMode) -> void:
+	if get_tree() == null or scene_path.is_empty():
 		return
-	var error := get_tree().change_scene_to_file(scene_path)
-	if error != OK:
-		_is_transitioning = false
 
-func _get_checkpoint_indicator_text() -> String:
-	if _player == null or _checkpoint_root == null:
-		return "Checkpoint: --"
+	_set_phase(GamePhase.TRANSITIONING)
+	_set_paused(false)
+	_set_player_locked(true)
+	Input.mouse_mode = mouse_mode
 
-	var checkpoint_center := _checkpoint_root.global_position + _checkpoint_root.global_basis.y * _get_checkpoint_vertical_offset()
-	var to_checkpoint := checkpoint_center - _player.global_position
-	if not to_checkpoint.is_finite() or to_checkpoint.length_squared() < 0.0001:
-		return "Checkpoint: --"
+	var manager := get_node_or_null("/root/SceneTransitionManager")
+	if manager != null and manager.has_method("request_transition"):
+		var accepted := bool(manager.call("request_transition", scene_path, show_loading_overlay, mouse_mode))
+		if accepted:
+			return
 
-	var up := _safe_normalized(_player.up_direction, Vector3.UP)
-	var right := _safe_normalized(_player.global_basis.x - up * _player.global_basis.x.dot(up), Vector3.RIGHT)
-	var forward := _safe_normalized(-( _player.global_basis.z - up * _player.global_basis.z.dot(up) ), Vector3.FORWARD)
+	push_warning("SceneTransitionManager unavailable or busy; transition cancelled.")
+	_set_phase(GamePhase.PLAYING)
 
-	var planar := to_checkpoint - up * to_checkpoint.dot(up)
-	var dist := to_checkpoint.length()
-	if planar.length_squared() < 0.0001:
-		return "Checkpoint: %.0fm ↑" % dist
+func _prepare_cesium_for_scene_exit(tree: SceneTree) -> void:
+	if tree.current_scene == null:
+		return
 
-	var dir := planar.normalized()
-	var side := dir.dot(right)
-	var fwd := dir.dot(forward)
-	var arrow := "↑"
-	if absf(side) > absf(fwd):
-		arrow = "→" if side > 0.0 else "←"
-	elif fwd < 0.0:
-		arrow = "↓"
+	var current := tree.current_scene
+	var cameras := current.find_children("*", "AbstractCesiumCamera", true, false)
+	for camera_node in cameras:
+		if camera_node == null or not is_instance_valid(camera_node):
+			continue
+		camera_node.set_process(false)
 
-	return "Checkpoint: %.0fm %s" % [dist, arrow]
+	var tilesets := current.find_children("*", "Cesium3DTileset", true, false)
+	for tileset in tilesets:
+		if tileset == null or not is_instance_valid(tileset):
+			continue
+		tileset.set_process(false)
+		tileset.set_physics_process(false)
+
+	var georef := current.get_node_or_null("CesiumGeoreference")
+	if georef != null and is_instance_valid(georef):
+		georef.set_process(false)
+		georef.set_physics_process(false)
 
 func _spawn_checkpoint() -> void:
 	if _checkpoint_root != null:
@@ -373,6 +412,33 @@ func _spawn_checkpoint() -> void:
 			checkpoint_pos = emergency_ground
 		else:
 			checkpoint_pos = _spawn_ground_origin if _spawn_ground_origin.is_finite() else _spawn_origin
+
+	if _player != null and checkpoint_pos.is_finite():
+		var player_ground := _snap_checkpoint_ground_to_surface(_player.global_position)
+		var player_anchor := player_ground if player_ground.is_finite() else _player.global_position
+		var up := _safe_normalized(_spawn_up, Vector3.UP)
+		var to_checkpoint := checkpoint_pos - player_anchor
+		var planar_to_checkpoint := to_checkpoint - up * to_checkpoint.dot(up)
+		var min_spawn_distance := maxf(checkpoint_min_distance * 0.8, checkpoint_radius * 3.0)
+		if planar_to_checkpoint.length() < min_spawn_distance:
+			var fallback_dir := _safe_normalized(_spawn_forward, Vector3.FORWARD)
+			var moved_planar := _clamp_planar_to_world_border(player_anchor + fallback_dir * min_spawn_distance)
+			var moved_ground := _snap_checkpoint_ground_to_surface(moved_planar)
+			if moved_ground.is_finite():
+				checkpoint_pos = moved_ground
+			else:
+				var moved := false
+				for i in range(8):
+					var angle := TAU * (float(i) / 8.0)
+					var dir := _spawn_right * cos(angle) + _spawn_forward * sin(angle)
+					var ring_planar := _clamp_planar_to_world_border(player_anchor + dir * min_spawn_distance)
+					var ring_ground := _snap_checkpoint_ground_to_surface(ring_planar)
+					if ring_ground.is_finite():
+						checkpoint_pos = ring_ground
+						moved = true
+						break
+				if not moved:
+					checkpoint_pos = _clamp_planar_to_world_border(checkpoint_pos)
 	var checkpoint_basis := Basis(_spawn_right, _spawn_up, _spawn_forward).orthonormalized()
 	var local_vertical_offset := _get_checkpoint_vertical_offset()
 
@@ -482,7 +548,7 @@ func _is_within_world_border(point: Vector3) -> bool:
 	var up := _safe_normalized(_world_up, Vector3.UP)
 	var to_pos := point - _world_origin
 	var planar := to_pos - up * to_pos.dot(up)
-	var max_radius := maxf(world_border_radius - checkpoint_radius, 0.0)
+	var max_radius := maxf(world_border_radius - checkpoint_radius - checkpoint_border_margin, 0.0)
 	return planar.length() <= max_radius + 0.05
 
 func _clamp_planar_to_world_border(planar_position: Vector3) -> Vector3:
@@ -490,7 +556,7 @@ func _clamp_planar_to_world_border(planar_position: Vector3) -> Vector3:
 	var to_pos := planar_position - _world_origin
 	var vertical := up * to_pos.dot(up)
 	var planar := to_pos - vertical
-	var max_radius := maxf(world_border_radius - checkpoint_radius, 0.0)
+	var max_radius := maxf(world_border_radius - checkpoint_radius - checkpoint_border_margin, 0.0)
 	var planar_len := planar.length()
 	if planar_len <= max_radius:
 		return planar_position
@@ -500,8 +566,14 @@ func _clamp_planar_to_world_border(planar_position: Vector3) -> Vector3:
 
 func _find_checkpoint_ground_position() -> Vector3:
 	var base_origin := _spawn_ground_origin if _spawn_ground_origin.is_finite() else _spawn_origin
+	var max_radius := maxf(world_border_radius - checkpoint_radius - checkpoint_border_margin, 0.0)
+	var effective_spawn_range := minf(checkpoint_spawn_range, max_radius)
+	var effective_min_distance := minf(checkpoint_min_distance, effective_spawn_range)
+	if effective_spawn_range <= 0.1:
+		return base_origin
+
 	for _attempt in range(max_spawn_attempts):
-		var distance := randf_range(checkpoint_min_distance, checkpoint_spawn_range)
+		var distance := randf_range(effective_min_distance, effective_spawn_range)
 		var angle := randf_range(0.0, TAU)
 		var planar_dir := _spawn_right * cos(angle) + _spawn_forward * sin(angle)
 		var planar_pos := base_origin + planar_dir * distance
@@ -512,14 +584,24 @@ func _find_checkpoint_ground_position() -> Vector3:
 		var to_candidate := candidate - base_origin
 		var planar_to_candidate := to_candidate - _spawn_up * to_candidate.dot(_spawn_up)
 		var planar_distance := planar_to_candidate.length()
-		if planar_distance <= checkpoint_spawn_range + 0.1 and _is_within_world_border(candidate) and planar_distance >= checkpoint_min_distance * 0.7:
+		if planar_distance <= effective_spawn_range + 0.1 and _is_within_world_border(candidate) and planar_distance >= effective_min_distance * 0.7:
 			return candidate
 
-	var fallback_planar := base_origin + _spawn_forward * checkpoint_min_distance
+	var fallback_planar := base_origin + _spawn_forward * effective_min_distance
 	fallback_planar = _clamp_planar_to_world_border(fallback_planar)
 	var fallback_ground := _snap_checkpoint_ground_to_surface(fallback_planar)
 	if fallback_ground.is_finite():
 		return fallback_ground
+
+	var safe_distance := maxf(checkpoint_radius * 3.0, effective_min_distance * 0.8)
+	if safe_distance > 0.1:
+		for i in range(12):
+			var angle := TAU * (float(i) / 12.0)
+			var planar_dir := _spawn_right * cos(angle) + _spawn_forward * sin(angle)
+			var ring_planar := _clamp_planar_to_world_border(base_origin + planar_dir * safe_distance)
+			var ring_ground := _snap_checkpoint_ground_to_surface(ring_planar)
+			if ring_ground.is_finite() and _is_within_world_border(ring_ground):
+				return ring_ground
 
 	if _spawn_ground_origin.is_finite():
 		return _spawn_ground_origin
@@ -527,9 +609,13 @@ func _find_checkpoint_ground_position() -> Vector3:
 	return Vector3(INF, INF, INF)
 
 func _on_checkpoint_body_entered(body: Node) -> void:
-	if _game_over:
+	if not _is_phase(GamePhase.PLAYING):
 		return
 	if body != _player:
+		return
+	if not _initial_checkpoint_spawned:
+		return
+	if not _player.is_physics_processing():
 		return
 
 	_score += checkpoint_points
