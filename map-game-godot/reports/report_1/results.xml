@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites id="2026-03-01" name="report_1" tests="12" failures="0" skipped="0" flaky="0" time="0.000">
+	<testsuite id="0" name="GameStateScoringTest" package="test/unit" timestamp="2026-03-01T19:18:11" hostname="localhost" tests="4" failures="0" errors="0" skipped="0" flaky="0" time="0.186">
+		<testcase name="test_get_map_key_for_city_uses_city_prefix" classname="GameStateScoringTest" time="0.020">
+		</testcase>
+		<testcase name="test_submit_score_rejects_lower_or_equal_values" classname="GameStateScoringTest" time="0.027">
+		</testcase>
+		<testcase name="test_submit_score_without_key_uses_selected_city" classname="GameStateScoringTest" time="0.035">
+		</testcase>
+		<testcase name="test_get_selected_city_data_matches_selected_city" classname="GameStateScoringTest" time="0.034">
+		</testcase>
+	</testsuite>
+	<testsuite id="1" name="GameStateTest" package="test/unit" timestamp="2026-03-01T19:18:11" hostname="localhost" tests="4" failures="0" errors="0" skipped="0" flaky="0" time="0.152">
+		<testcase name="test_city_names_belfast_first_and_contains_expected_entries" classname="GameStateTest" time="0.021">
+		</testcase>
+		<testcase name="test_set_selected_city_ignores_unknown_city" classname="GameStateTest" time="0.021">
+		</testcase>
+		<testcase name="test_get_city_data_returns_fallback_for_unknown_city" classname="GameStateTest" time="0.021">
+		</testcase>
+		<testcase name="test_get_high_score_uses_selected_city_key" classname="GameStateTest" time="0.035">
+		</testcase>
+	</testsuite>
+	<testsuite id="2" name="MenuUiBehaviorTest" package="test/unit" timestamp="2026-03-01T19:18:11" hostname="localhost" tests="4" failures="0" errors="0" skipped="0" flaky="0" time="0.153">
+		<testcase name="test_main_menu_sample_title_palette_starts_with_theme_dark" classname="MenuUiBehaviorTest" time="0.022">
+		</testcase>
+		<testcase name="test_controls_screen_sample_title_palette_wraps" classname="MenuUiBehaviorTest" time="0.021">
+		</testcase>
+		<testcase name="test_city_select_apply_dropdown_palette_sets_overrides" classname="MenuUiBehaviorTest" time="0.022">
+		</testcase>
+		<testcase name="test_city_select_apply_dropdown_palette_handles_null_safely" classname="MenuUiBehaviorTest" time="0.036">
+		</testcase>
+	</testsuite>
+</testsuites>

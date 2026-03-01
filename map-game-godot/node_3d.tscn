@@ -47,6 +47,34 @@ globe_node = NodePath("../../CesiumGeoreference")
 tilesets = [NodePath("../../CesiumGeoreference/Google Photorealistic 3D Tiles")]
 render_atmosphere = true
 
+[node name="CrosshairH" parent="Player/GrappleCrosshairLayer/GrappleCrosshair" index="0"]
+layout_mode = 0
+offset_top = 0.0
+offset_bottom = 2.0
+
+[node name="CrosshairV" parent="Player/GrappleCrosshairLayer/GrappleCrosshair" index="1"]
+layout_mode = 0
+offset_left = 0.0
+offset_right = 2.0
+
+[node name="GrappleCooldownIndicator" parent="Player/GrappleCrosshairLayer/GrappleCrosshair" index="2"]
+anchors_preset = 0
+
+[node name="GrappleIcon" parent="Player/GrappleCrosshairLayer/GrappleCrosshair/GrappleCooldownIndicator" index="0"]
+layout_mode = 0
+offset_top = 0.0
+offset_bottom = 23.0
+
+[node name="CooldownBarBg" parent="Player/GrappleCrosshairLayer/GrappleCrosshair/GrappleCooldownIndicator" index="1"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 40.0
+offset_bottom = 6.0
+
+[node name="CooldownBarFill" parent="Player/GrappleCrosshairLayer/GrappleCrosshair/GrappleCooldownIndicator/CooldownBarBg" index="0"]
+layout_mode = 0
+
 [node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=1146109504]
 
 [node name="ColorRect" type="ColorRect" parent="CanvasLayer" unique_id=347801379]
